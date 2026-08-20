@@ -1,0 +1,255 @@
+/* Document-level base: reset, typography, scrollbars, focus, shared controls. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--label-primary);
+  background: var(--bg-base);
+  /* Grayscale antialiasing over subpixel; other engines ignore both. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+a {
+  color: var(--state-info);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--state-info);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scrollbars are a pointer affordance, not chrome: thin, thumb-only, and
+   they never change layout when they appear. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── shared controls ─────────────────────────────────────────────────── */
+
+/* Capsule button geometry: h36 / r18 / pad 0 14 / 14-22 type, and a compact
+   h28 / r14 form for dense rows. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--label-primary);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn.sm {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.btn.primary {
+  background: var(--button-primary-fill);
+  color: var(--button-primary-label);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--interactive-hover);
+}
+
+.btn.ghost:active:not(:disabled) {
+  background: var(--interactive-active);
+}
+
+.btn.outline {
+  border: 1px solid var(--border-l2);
+}
+
+.btn.outline:hover:not(:disabled) {
+  background: var(--interactive-hover);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: var(--interactive-hover-danger);
+  color: var(--state-error);
+}
+
+/* An inline glyph inside a label, a row or a button.
+ *
+ * The rule is global on purpose: `icon()` renders an SVG sized `100%`, so a
+ * span without a size stretches to whatever the flex row gives it — which is
+ * how a 16px plus sign ended up as tall as the button it sat in. One rule
+ * here means no call site has to remember. */
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* Icon-only control: a 28px circle, 36px in the rail (DSH's rail spec). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--label-secondary);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--interactive-hover);
+  color: var(--label-primary);
+}
+
+.icon-btn.lg {
+  width: 36px;
+  height: 36px;
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn.lg svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Quiet metadata tag. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--interactive-hover);
+  color: var(--label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.pill.click:hover {
+  background: var(--interactive-active);
+  color: var(--label-primary);
+}
+
+.dot-sep {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--label-caption);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

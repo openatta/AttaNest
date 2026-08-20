@@ -1,0 +1,479 @@
+/* The conversation flow.
+ *
+ * One 16px rhythm through the column gap; the column is 748px wide and shares
+ * its center axis with the composer card. Geometry follows DSH: user bubbles
+ * are 22px capsules capped at 525px, assistant narration is 16/28 full width,
+ * and a tool call is a single 24px row rather than a box. */
+
+#scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px calc(var(--chat-clearance) + 16px) 8px;
+  scrollbar-gutter: stable;
+}
+
+#flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: var(--chat-width);
+  margin: 0 auto;
+  padding-bottom: 8px;
+}
+
+.blk {
+  min-width: 0;
+  animation: nest-in var(--dur) var(--ease);
+}
+
+@keyframes nest-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+/* ── user ────────────────────────────────────────────────────────────── */
+.u-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.u {
+  max-width: min(525px, 82%);
+  padding: 10px 16px;
+  border-radius: var(--radius-card);
+  background: var(--bg-bubble);
+  color: var(--label-primary);
+  font-size: 16px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── assistant ───────────────────────────────────────────────────────── */
+.a {
+  font-size: 16px;
+  line-height: 28px;
+  color: var(--label-primary);
+  overflow-wrap: anywhere;
+}
+
+.a.streaming::after {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  background: var(--label-caption);
+  animation: nest-caret 1s steps(2) infinite;
+}
+
+@keyframes nest-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Reasoning: quiet, secondary, never the main voice. */
+.think {
+  padding-left: 12px;
+  border-left: 2px solid var(--border-l2);
+  color: var(--label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
+}
+
+/* ── 24px rows: tools, compaction, injected context ──────────────────── */
+.row-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.row-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0 6px 0 0;
+  border-radius: 6px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.row-head:hover {
+  background: var(--interactive-hover);
+}
+
+.row-head .lead {
+  flex: none;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--label-tertiary);
+}
+
+.row-head .name {
+  flex: none;
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 500;
+}
+
+.row-head .summary {
+  flex: 1 1 auto;
+  color: var(--label-tertiary);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 24px;
+}
+
+.row-head .tail {
+  flex: none;
+  color: var(--label-caption);
+  font-size: 11px;
+  line-height: 24px;
+}
+
+.row-item[data-state="error"] .lead {
+  color: var(--state-error);
+}
+
+.row-item[data-state="error"] .tail {
+  color: var(--state-error);
+}
+
+/* A running tool is marked by a glare sweeping across the row, not by a
+   spinner: the row is already the smallest thing on screen. */
+.row-item[data-state="running"] .row-head::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 240px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-base) 65%, transparent) 55%,
+    transparent 100%
+  );
+  animation: nest-sweep 2.6s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes nest-sweep {
+  0% {
+    left: -240px;
+  }
+  90%,
+  100% {
+    left: 100%;
+  }
+}
+
+.row-body {
+  display: none;
+  margin: 6px 0 2px 8px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border-l2);
+}
+
+.row-item.open .row-body {
+  display: block;
+}
+
+.row-body .label {
+  margin: 8px 0 3px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.row-body .label:first-child {
+  margin-top: 0;
+}
+
+.row-body pre {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--label-secondary);
+}
+
+.row-body .actions {
+  margin-top: 8px;
+}
+
+/* ── permission ask ──────────────────────────────────────────────────── */
+.ask {
+  border: 1px solid var(--state-warn);
+  border-radius: 16px;
+  background: var(--state-warn-soft);
+  padding: 12px 14px;
+}
+
+.ask .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.ask .head .lead {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--state-warn-label);
+}
+
+.ask .msg {
+  margin-top: 4px;
+  color: var(--label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ask .paths {
+  margin-top: 6px;
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.ask .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ask .actions .btn {
+  background: var(--bg-layer-1);
+}
+
+.ask .actions .btn.primary {
+  background: var(--button-primary-fill);
+}
+
+.ask .countdown {
+  margin-left: auto;
+  color: var(--label-tertiary);
+  font-size: 12px;
+}
+
+.ask.done {
+  border-color: var(--border-l2);
+  background: var(--interactive-hover);
+}
+
+.ask.done .actions {
+  display: none;
+}
+
+/* ── sub-agent ───────────────────────────────────────────────────────── */
+.agent {
+  border: 1px dashed var(--border-l3);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.agent .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.agent .head .tag {
+  color: var(--state-info);
+  font-family: var(--font-code);
+  font-size: 11px;
+}
+
+.agent .lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 6px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* ── notes ───────────────────────────────────────────────────────────── */
+.note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--label-caption);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.note.err {
+  color: var(--state-error);
+}
+
+.note::before,
+.note::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-l1);
+}
+
+/* ── empty state ─────────────────────────────────────────────────────── */
+#hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+#hero h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 550;
+}
+
+#hero p {
+  margin: 0;
+  color: var(--label-tertiary);
+  font-size: 14px;
+  max-width: 420px;
+}
+
+#hero .mark {
+  width: 44px;
+  height: 44px;
+  color: var(--state-info);
+}
+
+/* ── markdown ────────────────────────────────────────────────────────── */
+.md > *:first-child {
+  margin-top: 0;
+}
+
+.md > *:last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0 0 16px;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 24px 0 8px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.md h1 {
+  font-size: 20px;
+}
+
+.md h2 {
+  font-size: 18px;
+}
+
+.md h3 {
+  font-size: 16px;
+}
+
+.md h4 {
+  font-size: 15px;
+}
+
+.md ul,
+.md ol {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+
+.md li {
+  margin: 2px 0;
+}
+
+.md code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--code-inline);
+  font-family: var(--font-code);
+  font-size: 0.87em;
+}
+
+.md pre {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-l1);
+  border-radius: 12px;
+  background: var(--code-block);
+  overflow-x: auto;
+}
+
+.md pre code {
+  padding: 0;
+  background: none;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.md blockquote {
+  margin: 0 0 16px;
+  padding-left: 14px;
+  border-left: 3px solid var(--border-l2);
+  color: var(--label-secondary);
+}
+
+.md hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px solid var(--border-l2);
+}
+
+.md table {
+  display: block;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.md th,
+.md td {
+  padding: 6px 10px;
+  border: 1px solid var(--border-l2);
+  text-align: left;
+}
+
+.md img {
+  max-width: 100%;
+  border-radius: 10px;
+}

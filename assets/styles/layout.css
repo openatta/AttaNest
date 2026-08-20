@@ -1,0 +1,136 @@
+/* AppFrame: three columns — sidebar, conversation, details.
+ *
+ * Collapsing the sidebar leaves a 56px control rail (its controls stay
+ * reachable); closing details goes to zero width. Only details concedes when
+ * the window narrows, and it auto-closes rather than squeezing the
+ * conversation below its content width. */
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#banner {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--state-warn-soft);
+  color: var(--state-warn-label);
+  border-bottom: 1px solid var(--border-l1);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+#banner.on {
+  display: flex;
+}
+
+#banner .close {
+  margin-left: auto;
+  color: inherit;
+  opacity: 0.7;
+}
+
+#frame {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
+  min-height: 0;
+  transition: grid-template-columns 300ms var(--ease);
+}
+
+#frame[data-sidebar="collapsed"] {
+  grid-template-columns: var(--rail-width) minmax(0, 1fr) 0;
+}
+
+#frame[data-details="open"] {
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--details-width);
+}
+
+#frame[data-sidebar="collapsed"][data-details="open"] {
+  grid-template-columns: var(--rail-width) minmax(0, 1fr) var(--details-width);
+}
+
+/* Details concedes first, then the sidebar goes to its rail. */
+@media (max-width: 1180px) {
+  #frame[data-details="open"] {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 320px;
+  }
+}
+
+@media (max-width: 960px) {
+  #frame,
+  #frame[data-details="open"],
+  #frame[data-sidebar="collapsed"][data-details="open"] {
+    grid-template-columns: var(--rail-width) minmax(0, 1fr) 0;
+  }
+}
+
+#main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-base);
+}
+
+/* Conversation header: session identity on the left, session-scoped controls
+   on the right. Transparent over the flow — it is chrome, not a surface. */
+#head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  flex: none;
+}
+
+#head .title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  max-width: 42%;
+}
+
+#head .spacer {
+  flex: 1 1 auto;
+}
+
+#head .meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  min-width: 0;
+}
+
+#conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+}
+
+#conn .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--label-caption);
+  transition: background var(--dur) var(--ease);
+}
+
+#conn.on .dot {
+  background: var(--state-success);
+}
+
+#conn.off .dot {
+  background: var(--state-error);
+}
+
+#conn.on .label {
+  display: none;
+}

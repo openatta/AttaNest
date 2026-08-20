@@ -1,0 +1,6 @@
+/target
+/.local
+.DS_Store
+.env
+/.atta
+/3rds

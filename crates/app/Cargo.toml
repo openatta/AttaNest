@@ -1,0 +1,23 @@
+[package]
+name = "nest"
+version      = { workspace = true }
+edition      = { workspace = true }
+rust-version = { workspace = true }
+license      = { workspace = true }
+publish      = false
+description  = "AttaCore's web front end: one binary, one page, one WebSocket"
+
+[[bin]]
+name = "nest"
+path = "src/main.rs"
+
+[dependencies]
+nest-engine = { workspace = true }
+nest-hub    = { workspace = true }
+nest-web    = { workspace = true }
+tokio       = { workspace = true }
+anyhow      = { workspace = true }
+clap        = { workspace = true }
+tracing     = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid        = { workspace = true }

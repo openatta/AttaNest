@@ -1,0 +1,22 @@
+[package]
+name = "nest-engine"
+version      = { workspace = true }
+edition      = { workspace = true }
+rust-version = { workspace = true }
+license      = { workspace = true }
+publish      = false
+description  = "Builds the AttaCore daemon engine in-process for Nest"
+
+[dependencies]
+daemon      = { workspace = true }
+base        = { workspace = true }
+model       = { workspace = true }
+scene       = { workspace = true }
+history     = { workspace = true }
+tokio       = { workspace = true }
+tokio-util  = { workspace = true }
+anyhow      = { workspace = true }
+tracing     = { workspace = true }
+serde_json  = { workspace = true }
+async-trait = { workspace = true }
+reqwest     = { workspace = true }

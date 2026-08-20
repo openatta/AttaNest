@@ -1,0 +1,25 @@
+[package]
+name = "nest-hub"
+version      = { workspace = true }
+edition      = { workspace = true }
+rust-version = { workspace = true }
+license      = { workspace = true }
+publish      = false
+description  = "Session hub: one daemon connection, event replay, send queue, browser fan-out"
+
+[dependencies]
+nest-engine = { workspace = true }
+daemon      = { workspace = true }
+base        = { workspace = true }
+telemetry   = { workspace = true }
+tokio       = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+anyhow      = { workspace = true }
+tracing     = { workspace = true }
+async-trait = { workspace = true }
+uuid        = { workspace = true }
+ignore      = { workspace = true }
+
+[dev-dependencies]
+tempfile    = { workspace = true }

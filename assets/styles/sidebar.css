@@ -1,0 +1,464 @@
+/* Sidebar: brand, new session, the session section, the list, the footer.
+ *
+ * Geometry is DSH's (`ui-sidebar/SidebarRoot.module.css` and
+ * `ui-workspace/rows/Rows.module.css`): 6/12 column padding, a 38px outlined
+ * new-session card, 28px circular icon controls, 34px project rows and 32px
+ * session rows on a 22px indent step, and a 56px rail of 36px controls. */
+
+#side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 6px 12px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-l1);
+  font-size: 14px;
+  overflow: hidden;
+  /* The sidebar sits above the conversation surface, so its scrollbar uses the
+     heavier pair — and goes transparent when the pointer is elsewhere. */
+  --scrollbar-thumb: var(--n-300);
+}
+
+html[data-theme="dark"] #side {
+  --scrollbar-thumb: var(--n-750);
+}
+
+#side.quiet {
+  --scrollbar-thumb: transparent;
+  --scrollbar-thumb-hover: transparent;
+}
+
+/* Collapse in three phases: the expanded content fades in place (150ms), the
+   rail layout is applied, then the controls enter from the old right edge
+   (150ms) while the column track finishes sliding (300ms). */
+#side.fading > * {
+  opacity: 0;
+  transition: opacity 150ms var(--ease);
+}
+
+#side.rail-in > * {
+  animation: nest-rail-in 150ms var(--ease) backwards;
+}
+
+@keyframes nest-rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(49px);
+  }
+}
+
+#frame[data-sidebar="collapsed"] #side {
+  padding: 18px 10px 6px;
+  align-items: center;
+}
+
+#frame[data-sidebar="collapsed"] #side .icon-btn {
+  width: 36px;
+  height: 36px;
+  color: var(--label-primary);
+}
+
+/* ── brand ───────────────────────────────────────────────────────────── */
+#side .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 36px;
+  padding: 0 4px;
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: 0.2px;
+}
+
+#side .brand .mark {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--state-info);
+}
+
+#side .brand .collapse {
+  margin-left: auto;
+}
+
+#frame[data-sidebar="collapsed"] #side .brand {
+  flex-direction: column;
+  height: auto;
+  gap: 12px;
+  padding: 0;
+}
+
+#frame[data-sidebar="collapsed"] #side .brand .name {
+  display: none;
+}
+
+/* ── new session ─────────────────────────────────────────────────────── */
+/* An elevated outlined card, not a brand-filled pill: the accent belongs to
+   the send control, and a sidebar that shouts at the top makes the list below
+   it read as secondary. */
+#new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  height: 38px;
+  margin: 0 2px 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-l2);
+  border-radius: 12px;
+  background: var(--bg-layer-1);
+  color: var(--label-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  overflow: hidden;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+#new:hover {
+  background: var(--interactive-hover-solid);
+}
+
+#frame[data-sidebar="collapsed"] #new {
+  align-self: flex-start;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 12px 0;
+  border-radius: 12px;
+}
+
+#frame[data-sidebar="collapsed"] #new .label,
+#frame[data-sidebar="collapsed"] #side .section-head,
+#frame[data-sidebar="collapsed"] #sessions,
+#frame[data-sidebar="collapsed"] #side .foot .text {
+  display: none;
+}
+
+/* ── section header: label, expanding search, add-project ────────────── */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: none;
+  height: 36px;
+  margin: 2px -4px 4px 0;
+  padding-left: 4px;
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--label-tertiary);
+}
+
+.section-head .section-label {
+  flex: none;
+  max-width: 45%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 20px;
+  transition:
+    max-width 180ms var(--ease),
+    opacity 120ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.section-head.searching .section-label {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+}
+
+.search-slot {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  max-width: 28px;
+  margin-left: auto;
+  transition: max-width 180ms var(--ease);
+}
+
+.section-head.searching .search-slot {
+  max-width: 100%;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.section-head.searching .search-box {
+  padding: 0 4px 0 8px;
+  border-color: var(--border-l2);
+  background: var(--bg-base);
+}
+
+#search {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: 13px;
+  color: var(--label-primary);
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+
+.section-head.searching #search {
+  width: auto;
+  opacity: 1;
+}
+
+/* ── the list ────────────────────────────────────────────────────────── */
+#sessions {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px 12px;
+  scrollbar-gutter: stable;
+}
+
+.group + .group {
+  margin-top: 6px;
+}
+
+/* Project row: 34px, folder glyph that becomes a chevron under the pointer,
+   trailing count that becomes the actions. */
+.group > .title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--label-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group > .title:hover {
+  background: var(--interactive-hover);
+}
+
+.group > .title .chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 20px;
+  color: var(--label-tertiary);
+}
+
+.group > .title .chev .glyph {
+  width: 14px;
+  height: 14px;
+}
+
+.group > .title .chev .arrow {
+  display: none;
+}
+
+.group > .title:hover .chev .folder {
+  display: none;
+}
+
+.group > .title:hover .chev .arrow {
+  display: inline-flex;
+}
+
+.group > .title .label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.group > .title .count {
+  flex: none;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.group > .title .more {
+  display: none;
+}
+
+.group > .title:hover .count {
+  display: none;
+}
+
+.group > .title:hover .more {
+  display: inline-flex;
+}
+
+/* Session row: 32px single line on the 22px indent step, with the timestamp
+   giving way to the row actions under the pointer. */
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px 0 30px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--label-primary);
+  animation: nest-row-in 150ms var(--ease);
+}
+
+@keyframes nest-row-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.srow:hover,
+.srow.on {
+  background: var(--interactive-hover);
+}
+
+.srow .live {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--state-success);
+  animation: nest-pulse 1.6s var(--ease) infinite;
+}
+
+@keyframes nest-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.srow .name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.srow .time {
+  flex: none;
+  margin-left: 6px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.srow .more {
+  display: none;
+  margin-left: 6px;
+}
+
+.srow:hover .time {
+  display: none;
+}
+
+.srow:hover .more {
+  display: inline-flex;
+}
+
+/* Search results carry two lines, so they are their own row shape. */
+.srow.hit {
+  height: auto;
+  min-height: 48px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.srow.hit .snippet {
+  color: var(--label-tertiary);
+  font-size: 12px;
+  line-height: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-rows {
+  width: 100%;
+  height: 28px;
+  padding: 0 12px 0 30px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--label-tertiary);
+  font-size: 12px;
+}
+
+.more-rows:hover {
+  color: var(--label-secondary);
+}
+
+.archive-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  margin-top: 6px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--label-tertiary);
+  font-size: 12px;
+}
+
+.archive-toggle:hover {
+  background: var(--interactive-hover);
+  color: var(--label-primary);
+}
+
+#side .empty {
+  padding: 16px 12px;
+  color: var(--label-tertiary);
+  font-size: 13px;
+}
+
+/* ── footer ──────────────────────────────────────────────────────────── */
+#side .foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 6px 2px 2px;
+  border-top: 1px solid var(--border-l1);
+  color: var(--label-caption);
+  font-size: 11px;
+}
+
+#side .foot .text {
+  margin-left: 4px;
+  min-width: 0;
+}
+
+#frame[data-sidebar="collapsed"] #side .foot {
+  flex-direction: column;
+  border-top: none;
+}
