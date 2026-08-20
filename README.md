@@ -1,109 +1,181 @@
-# Nest
+# AttaNest
 
-AttaCore 在浏览器里。一个 Rust 二进制：引擎、Web 服务器和前端都在里面，没有子进程、
-没有 socket、没有 npm。
+English | [简体中文](README.zh-CN.md)
+
+**[AttaCore](https://github.com/openatta/AttaCore) in a browser.** One Rust binary: the engine, the
+web server and the frontend are the same process — no subprocess, no socket, no npm.
+
+![AttaNest](docs/images/nest.png)
+
+`daemon` is a library, so `nest` links the engine in and talks to it through a function call rather
+than a socket. That removes a whole category of things to operate: no port for the engine, no
+handshake, no health check, no restart supervisor, no discovery file. And the frontend is native ES
+modules served straight out of the binary, so there is no bundler, no `node_modules`, and no build
+step between editing a file and reloading the page.
+
+## Status
+
+Early. The engine underneath it is real work and the UI is complete enough to use daily, but this
+repository is young and the protocol between the browser and the hub is ours to change. Expect
+breaking changes; pin a commit if you depend on one.
+
+## Run it
 
 ```sh
-export ANTHROPIC_AUTH_TOKEN=...        # 或 ANTHROPIC_API_KEY；ANTHROPIC_BASE_URL 可选
+git clone --recurse-submodules https://github.com/openatta/AttaNest.git
+cd AttaNest
 cargo build --release
-./target/release/nest                  # → http://127.0.0.1:4080/
+./target/release/nest                      # → http://127.0.0.1:4080/
 ```
+
+Rust 1.80 or newer. No Node, no package manager, nothing else. The `--recurse-submodules` matters:
+AttaCore lives at `core/` and the build needs it.
+
+No environment variable is required. With no credentials configured, open **Settings → Models &
+credentials → Add provider** and fill in a base URL and an API key — it is written to
+`settings.json`, and never reaches the browser or the logs. If you prefer the environment, set
+`ANTHROPIC_AUTH_TOKEN` (plus an optional `ANTHROPIC_BASE_URL`). With neither, startup fails and
+says so.
+
+## What makes it interesting
+
+- **A turn belongs to the server, not to your tab.** Close the tab mid-turn, reload, come back on
+  another one — the hub subscribed to the session *before any browser asked*, so the frames you
+  missed are already buffered and you catch up from them. This is the invariant the whole design
+  rests on, and it is why a refresh cannot lose a half-finished answer.
+
+- **You can read exactly what was sent to the model.** Not a summary — the assembled system blocks,
+  the complete tool catalog and the call configuration, with each block and each tool naming the
+  stage that produced it (`identity`, `skills`, `memory`, `mcp:<server>`, `plugin:<id>`). See below.
+
+- **No build step for the frontend.** `nest --assets-dir ./assets` serves the SPA from disk instead
+  of from the binary: edit, reload, done.
+
+- **It shares state with the terminal.** The engine directory is the same `~/.atta` that
+  `attacored` and AttaCode use, so a session you ran in the TUI opens here, and vice versa.
+
+- **Sends queue instead of failing.** Send while a turn is running and it goes in a queue that
+  drains when the turn ends. Stopping clears the queue too.
+
+- **Localhost only, and it enforces it.** Loopback binding (both `127.0.0.1` and `[::1]`, because
+  browsers resolve `localhost` to `::1` first), a per-process token, an Origin check, and a CSP with
+  no inline anything and no external sources.
+
+- **English and 简体中文** throughout, switchable at runtime.
+
+## In the UI
+
+Three panes, in the shape of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness):
+sessions on the left grouped by project, the conversation in the middle (streaming markdown, tool
+cards, permission cards, compaction marks, sub-agents), details on the right (the full input and
+output of one call).
+
+- Enter sends, Shift+Enter breaks a line; `/` opens command completion, fed by the engine's live
+  command list; `@` references a project file (respecting `.gitignore`)
+- ⌘K / Ctrl+K for a new session; right-click a session row to close, fork or delete it
+- The sidebar groups by project: collapsible, five per group by default, drag to reorder, rename,
+  archive. Type to filter titles; press Enter to search inside conversations instead
+- Images paste or drop into the composer and become 64px thumbnails
+- Settings covers appearance, language, engine settings (model, per-turn tokens, permission mode —
+  each writable to the global, scene or project tier), providers and credentials, scenes, MCP,
+  plugins and diagnostics
+
+## The request envelope
+
+![The request envelope](docs/images/request-envelope.png)
+
+Every model call carries an envelope — the system prompt as assembled, every tool definition, the
+call configuration — and normally you never see it. AttaCore records each call, and Nest folds
+those recordings into the points where the envelope *changed*, so the conversation shows one row
+per change and the details pane shows the full text.
+
+Because it is read from a recording rather than received as an event, it survives: reload the page,
+reopen the conversation tomorrow, restart the process — the envelope is still there. Recordings
+live in `<atta-dir>/recordings/<session-id>/` and are deleted with the session.
+
+They also contain everything the model saw, in plain text, with no redaction. Treat a recording as
+you would the transcript it belongs to.
+
+## Options
 
 ```
 nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 ```
 
-| 参数 | 说明 |
+| Option | Meaning |
 |---|---|
-| `--port` / `--host` | 默认 `4080` / `127.0.0.1`（3080 是 DSH 的默认端口，让开）。`--host` 只接受回环地址；给的是 IPv4 回环时会**同时监听 `[::1]`**，因为浏览器把 `localhost` 先解析成 `::1` |
-| `--scene` / `--scenes` | 默认场景与额外激活的场景（`coding` `chat` `research` `demo`） |
-| `--model` / `--max-tokens` | 新会话的模型；settings 三层仍然优先于它，与 `attacored` 一致 |
-| `--session-cap` / `--session-idle-timeout` | 会话上限与空闲回收 |
-| `--permission-prompt-timeout` | 权限提问多久没人答就按拒绝处理（默认 300 秒，UI 上是倒计时） |
-| `--atta-dir` | 引擎目录：配置、transcript、记忆、技能。默认 `$ATTA_CONFIG_HOME`，再默认 `~/.atta`（与 attacored / AttaCode 共用） |
-| `--data-dir` | 项目目录：选择器从这里开始，新建项目也建在这里。默认 `$NEST_DATA_DIR`，再默认 `~/Documents` |
+| `--port` / `--host` | Defaults `4080` / `127.0.0.1`. Loopback addresses only; given IPv4 loopback it **also listens on `[::1]`** |
+| `--scene` / `--scenes` | Default scene, and scenes activated alongside it (`coding` `chat` `research` `demo`) |
+| `--atta-dir` | Engine directory: config, transcripts, memory, skills, recordings. Defaults to `$ATTA_CONFIG_HOME`, then `~/.atta` |
+| `--data-dir` | Project directory: where the picker opens and new projects are created. Defaults to `$NEST_DATA_DIR`, then `~/Documents` |
 
-## 目录
+<details>
+<summary>Less common options</summary>
 
-两个可配置目录：
+| Option | Meaning |
+|---|---|
+| `--model` / `--max-tokens` | For new sessions. The three settings tiers still outrank them, as in `attacored` |
+| `--session-cap` / `--session-idle-timeout` | Ceiling on live sessions, and idle reclamation |
+| `--permission-prompt-timeout` | How long an unanswered permission prompt waits before counting as a refusal (default 300s; the UI counts down) |
+| `--assets-dir` | Serve the frontend from disk instead of from the binary — for development |
 
-- **引擎目录** `--atta-dir`（默认 `~/.atta`）—— 配置、transcript、记忆、技能、录像。与
-  `attacored` / AttaCode 共用，所以在 TUI 里跑过的会话在这里能直接打开。
-- **项目目录** `--data-dir`（默认 `~/Documents`）—— 选择器从这里开始，「新建项目」也建在
-  这里。是默认位置不是围栏：`$HOME` 下别处的项目照样能打开。
+</details>
+
+## Directories
+
+Two, and only two:
+
+- **Engine directory** `--atta-dir` (default `~/.atta`) — config, transcripts, memory, skills,
+  recordings. Shared with `attacored` and AttaCode.
+- **Project directory** `--data-dir` (default `~/Documents`) — where the picker starts and where
+  "new project" creates. A default, not a fence: projects elsewhere under `$HOME` open fine.
 
 ```sh
 nest --atta-dir /srv/atta --data-dir /srv/projects
 ```
 
-安装物只有这个二进制（网页应用编译在内，运行时不从安装目录读任何东西；`--assets-dir` 是
-开发时的例外）。Nest 自己的账本（工作区分组、会话标题、视图偏好、token、上传）也是数据，
-放在项目目录里的 `.nest/`，跟着 `--data-dir` 一起走（`NEST_STATE_DIR` 可单独移）。
+What you install is one binary. The web app is compiled into it and nothing is read from the
+install directory at runtime. Nest's own bookkeeping — workspaces, titles, view preferences, the
+token, uploads — is data too, and lives in `.nest/` under the project directory.
 
-## 第一次运行
-
-不需要任何环境变量：
-
-```sh
-nest                      # 打开 http://127.0.0.1:4080/
-```
-
-没有模型凭据时，到**设置 → 模型与凭据 → 添加 provider**填 base URL 与 API key 即可开跑；
-凭据写进 settings.json，不进浏览器也不进日志。也可以照旧用 `ANTHROPIC_AUTH_TOKEN`
-（加上可选的 `ANTHROPIC_BASE_URL`）。两者都没有时启动会明确报错说这件事。
-
-## 界面
-
-三栏，形态参照 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：
-左侧会话列表（按项目分组），中间对话流（流式 markdown、工具卡片、权限卡片、压缩标记、
-子 Agent），右侧详情栏（工具的完整输入与输出）。
-
-- Enter 发送，Shift+Enter 换行；`/` 唤起命令补全（来自引擎的实时命令表）
-- ⌘K / Ctrl+K 新建会话；右键会话行 → 关闭 / 分叉 / 删除
-- 左侧按**项目分组**：折叠、每组默认 5 条、拖拽排序、重命名、归档；输入框内过滤标题，回车进内容搜索
-- 底部进**设置**：外观、语言（中/英）、引擎设置（模型、单轮 token、权限模式…，可选写进
-  全局/场景/项目哪一层）、provider 与凭据、场景、MCP、插件、诊断
-- 输入框：`/` 唤起命令，`@` 引用项目文件（走 .gitignore），图片可粘贴/拖放，附件是 64px 缩略图
-- 每次请求带给模型的**信封**（装配好的 system 块、完整工具表、调用配置）在流里占一行，
-  展开看全文，每块与每个工具都说得出自己来自哪（scene / skills / memory / MCP / plugin）。
-  来自引擎的录像（`<atta-dir>/recordings/`），所以刷新、重开、换个进程都还在；删会话时一并删
-- 有 turn 在跑时发送会**排队**，上一轮结束自动发出；停止按钮同时清空队列
-- 关掉 tab 或刷新不会打断 turn，重开自动追赶上（包括跑到一半的那一轮）
-
-## 结构
+## Layout
 
 ```
-crates/app      bin `nest`
-crates/web      axum：静态面、/ws、/upload、Origin + token + CSP
-crates/hub      会话中枢：唯一的引擎连接、事件重放、发送队列、方法白名单
-crates/engine   AttaCore 装配
-assets/         无构建的 SPA：index.html + styles/*.css + src/**.js（含 i18n 语言包，编译进二进制）
-core/           AttaCore（submodule）
+crates/app      the `nest` binary
+crates/web      axum: static files, /ws, /upload, Origin + token + CSP
+crates/hub      the session hub: sole engine connection, event replay, send queue, method allow-list
+crates/engine   AttaCore assembly
+assets/         the SPA, unbuilt: index.html + styles/*.css + src/**.js, compiled into the binary
+core/           AttaCore (submodule)
 ```
 
-前端是原生 ES 模块，没有 npm 也没有打包步骤。开发时：
+## Documentation
 
-```sh
-nest --assets-dir ./assets     # 静态面改从磁盘读：改完刷新即可，不必重编
-```
+[docs/architecture.md](docs/architecture.md) is the design record — why the browser does not talk to
+the engine directly (§3), how catch-up and replay keep a reload from losing anything (§5), which
+methods are not exposed to the browser (§4.1), and the trade-offs behind running the engine
+in-process (§2). *Written in Chinese.*
 
-设计与取舍见 [docs/architecture.md](docs/architecture.md) —— 特别是为什么浏览器不直连
-引擎（§3）、追赶与重放怎么保证刷新不丢内容（§5）、哪些方法不对浏览器开放（§4.1）。
-
-## 测试
+## Tests
 
 ```sh
 cargo clippy --workspace
-cargo test -p nest -p nest-hub -p nest-engine -p nest-web   # 我们的 Rust 测试
-node tests/style-lint.mjs                        # 样式静态检查（图标尺寸、令牌、id）
-node tests/reducer-smoke.mjs                     # 前端逻辑，离线，最快
-node tests/i18n-smoke.mjs                        # 语言包体检
-node tests/ui-smoke.mjs   <port> <token>         # 真引擎 + 真模型
-node tests/tool-smoke.mjs <port> <token>         # 真工具调用
+cargo test -p nest -p nest-hub -p nest-engine -p nest-web   # our Rust tests
+
+node tests/style-lint.mjs                        # static style checks: icon sizing, tokens, ids
+node tests/reducer-smoke.mjs                     # frontend logic, offline, fastest
+node tests/i18n-smoke.mjs                        # language-pack health
+node tests/readme-pairing.mjs                    # the two READMEs moved together
+node tests/ui-smoke.mjs   <port> <token>         # real engine + real model
+node tests/tool-smoke.mjs <port> <token>         # real tool calls
 ```
 
-`<token>` 从 `nest` 启动时打印的 token 文件里读（`<data-dir>/.nest/token`）。
+`<token>` comes from the token file `nest` prints at startup (`<data-dir>/.nest/token`).
 
-**不要用 `cargo test --workspace`**：它会连带跑被吸收进来的 AttaCore crate，而 Core 有两条
-测试假定自己是 workspace 根（从测试二进制往上找 `bridges/` 的副本），在我们这里必然失败。
-Core 的测试在 Core 里跑：`cd core && cargo test --workspace`。
+**Do not run `cargo test --workspace`.** It would also run the absorbed AttaCore crates, and two of
+Core's tests assume they are at the workspace root (they walk upward looking for `bridges/`), which
+cannot hold here. Run Core's tests in Core: `cd core && cargo test --workspace`.
+
+## License
+
+[Apache-2.0](LICENSE).

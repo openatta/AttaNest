@@ -498,6 +498,7 @@ kind、一个从来没被换进 DOM 的节点）在 Rust 测试里看不见，�
 | `tests/reducer-smoke.mjs` | 假 socket，脚本化地喂事件：流式 markdown、权限卡片（含倒计时与回答上线的 `decision`）、乱序 `tool_result` 按 id 配对、失败工具行的展开、详情栏、子 Agent、压缩行、队列、用量、驱逐横幅、命令补全、history 渲染（含注入上下文与跨消息的 `tool_result`）、请求信封（三份信封的变化分类、按来源标注的 system 块与工具、重读同一份录像不重复出行、重录之后出新行） | 否，离线且免费 |
 | `tests/style-lint.mjs` | 样式的静态不变量：每个 `icon()` 至少有一个带宽度的类（不然 SVG 会撑满行 —— 真出过）、无 `text-transform: uppercase`（对中文只会把字撑散）、feature 样式只用令牌不写死颜色、代码里 `$("x")` 的 id 确实存在 | 否 |
 | `tests/i18n-smoke.mjs` | 语言包：两包 key 一一对应、占位符一致、无空值；以 en 加载时界面确实是英文；切两次语言不泄漏订阅 | 否，离线且免费 |
+| `tests/readme-pairing.mjs` | 中英两份 README 是一起改的：比 `README.i18n.yaml` 里记下的 blob 哈希，只动一边就失败（`--write` 重记）；顺带查双向切换链接与引用到的图片都在 | 否 |
 | `tests/ui-smoke.mjs` | 真引擎、真模型：连接 → 建会话 → 发送 → 看回答流进来 → 请求信封那一行与它的详情 → 从侧栏重开走 history 路径，信封仍在（transcript 里没有它，只能来自录像） | 是 |
 | `tests/tool-smoke.mjs` | 真引擎的 `coding` 场景：真工具调用、工具卡片状态流转、展开、详情栏 | 是 |
 

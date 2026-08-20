@@ -347,12 +347,16 @@ function toolSignature(header) {
   return JSON.stringify(header.tools || []);
 }
 
-/** Identity of an envelope, for deciding what has already been rendered. */
+/** Identity of an envelope, for deciding what has already been rendered.
+ *
+ * Joined on NUL like `systemSignature` above, and for the same reason: a
+ * separator that cannot occur inside a field is the only one that cannot make
+ * two different envelopes agree by accident. */
 function envelopeSignature(header) {
   return [
     header.model, header.max_tokens, JSON.stringify(header.thinking_mode),
     systemSignature(header), toolSignature(header),
-  ].join(" ");
+  ].join("\0");
 }
 
 function subagentEvent(event, silent) {
