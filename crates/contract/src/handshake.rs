@@ -13,7 +13,12 @@ use serde::{Deserialize, Serialize};
 
 /// The client-facing protocol. Bumped when a method, an event shape or an
 /// error code changes in a way a client can observe.
-pub const PROTOCOL_VERSION: u32 = 3;
+///
+/// Stated once, in `ui/runtime/protocol.js`, and checked against this by
+/// `crates/contract/tests/protocol_version.rs` — a version written down twice
+/// eventually disagrees with itself, and the symptom is a refused handshake
+/// nobody changed.
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// The contribution point API. Bumped when a contribution point's contract
 /// changes — separately from the protocol, because a UI bundle can be current
@@ -63,6 +68,20 @@ pub struct Limits {
     pub max_upload_bytes: usize,
     pub replay_max_frames: usize,
 }
+
+/// The largest single RPC frame a client may send.
+///
+/// Published so a client knows when to stop inlining and use the bulk
+/// semantic instead, and **enforced at both ingresses** — a ceiling nobody
+/// checks is not a ceiling, it is a number in a handshake that the first
+/// large paste disproves (§2.5). Anything above this is refused with the
+/// limit in the message, rather than closing the connection under the
+/// client with no explanation.
+pub const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+
+/// The largest file the bulk semantic accepts. Anything bigger has to be an
+/// installed package, which has its own ceiling and its own method.
+pub const MAX_UPLOAD_BYTES: usize = 32 * 1024 * 1024;
 
 /// Why a handshake was refused, in words the client can show.
 pub fn refuse(client: &Handshake, supported: &[Topology]) -> Option<String> {

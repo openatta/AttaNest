@@ -6,6 +6,7 @@
 // alongside — so when they disagree, the interface can say so instead of
 // showing one of them and being wrong half the time.
 
+import { METHOD_NOT_FOUND, REFUSED } from "../../../ui/runtime/protocol.js";
 const assert = (cond, message) => { if (!cond) throw new Error(message); };
 
 export default {
@@ -61,10 +62,10 @@ export default {
       // it repoints model traffic. The same intent goes through this layer,
       // where it is a deliberate, audited method rather than a passthrough.
       const direct = await client.refused("config.setProvider", {});
-      assert(direct && direct.code === -32000, "config.setProvider is not refused");
+      assert(direct && direct.code === REFUSED, "config.setProvider is not refused");
       const e = await client.refused("nest.settings.setProvider", {});
       // Refused for want of arguments, not for want of permission.
-      if (e) assert(e.code !== -32000, `refused as unauthorized: ${e.message}`);
+      if (e) assert(e.code !== REFUSED, `refused as unauthorized: ${e.message}`);
     },
   },
 };

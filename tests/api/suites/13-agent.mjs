@@ -34,6 +34,15 @@ const settled = (client, sessionId) => client.waitFor(
 
 export default {
   needsModel: true,
+  /// Always against fixtures, in every mode.
+  ///
+  /// Every assertion here is about a *recorded* turn — the same tool called
+  /// at the same point with the same arguments. `--replay-dir` is a
+  /// whole-process flag, so in `--live` the shared backend records instead,
+  /// and this became a live-model suite whose results depended on whether the
+  /// model reached for a tool that run. It failed about one full run in five
+  /// and never once in isolation.
+  replayed: true,
 
   tests: {
     "a replayed turn produces the same text every run": async ({ client, replay }) => {

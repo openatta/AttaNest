@@ -26,6 +26,7 @@
 
 use std::convert::Infallible;
 
+use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -112,8 +113,29 @@ pub async fn rpc(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<Credential>,
-    Json(mut body): Json<Value>,
+    raw: Bytes,
 ) -> Response {
+    // Taken as bytes and parsed here rather than extracted as `Json`, so the
+    // two answers a client can get for a bad frame are the same on both
+    // topologies. The extractor's own refusals are plain text with an HTTP
+    // status — "failed to buffer the request body" — where the bidirectional
+    // topology answers a JSON-RPC error naming the ceiling. One semantic, two
+    // topologies: a limit that reads differently depending on which one is
+    // carrying it is the semantics leaking into the choice (§3.3).
+    if raw.len() > nest_contract::MAX_FRAME_BYTES {
+        return rpc_error(RpcError::new(
+            codes::INVALID_REQUEST,
+            format!(
+                "frame is {} bytes; the ceiling is {} — use the bulk channel",
+                raw.len(),
+                nest_contract::MAX_FRAME_BYTES
+            ),
+        ))
+        .into_response();
+    }
+    let Ok(mut body) = serde_json::from_slice::<Value>(&raw) else {
+        return rpc_error(RpcError::new(codes::PARSE_ERROR, "invalid JSON")).into_response();
+    };
     let Some(credential) = credential_of(&headers, &query) else {
         return rpc_error(RpcError::new(codes::HANDSHAKE_REFUSED, "no credential")).into_response();
     };
@@ -160,9 +182,9 @@ pub async fn respond(
     state: State<AppState>,
     headers: HeaderMap,
     query: Query<Credential>,
-    body: Json<Value>,
+    raw: Bytes,
 ) -> Response {
-    rpc(state, headers, query, body).await
+    rpc(state, headers, query, raw).await
 }
 
 /// This client's session events.

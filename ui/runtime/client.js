@@ -14,8 +14,8 @@
 import { t } from "./i18n/index.js";
 import { connectSplit } from "./topology.js";
 
-export const PROTOCOL_VERSION = 3;
-export const CONTRIB_API_VERSION = 1;
+export { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "./protocol.js";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "./protocol.js";
 
 const token = document.querySelector('meta[name="nest-token"]')?.content || "";
 

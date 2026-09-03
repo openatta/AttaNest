@@ -4,6 +4,17 @@
 // The interesting part is not the happy path — it is that a second answer is
 // a silent success rather than an error, because two people looking at the
 // same session both pressing "allow" is a normal thing to happen.
+//
+// # `permission_mode` is what turns any of this on
+//
+// A session created without it gets the engine's `AllowAllPermission`: every
+// tool call proceeds and **no ask is ever emitted**. These tests used to
+// create plain sessions and then report "the model did not call a tool" when
+// nothing arrived — a reason that was never the real one. The model may well
+// have called a tool; there was simply nothing configured to ask about it.
+//
+// So the mode is set here, and the inconclusive message no longer claims to
+// know something it cannot see.
 
 import { connect, inconclusive, finish } from "../harness.mjs";
 
@@ -18,8 +29,11 @@ export default {
 
   tests: {
     "a tool that needs permission asks every watcher": async ({ backend, client }) => {
-      const created = await client.call("session.create",
-        { scene: "coding", project_root: process.cwd() }).catch(() => null);
+      const created = await client.call("session.create", {
+        scene: "coding",
+        project_root: process.cwd(),
+        options: { permission_mode: "default" },
+      }).catch(() => null);
       if (!created) inconclusive("no coding scene in this build, so no tool to ask about");
 
       const second = await connect(backend, { topology: client.topology });
@@ -45,9 +59,10 @@ export default {
       } catch {
         second.close();
         await finish(client, created.session_id);
-        // The model answered without reaching for a tool, so there was
-        // nothing to ask about. Not a pass: nothing was shown either way.
-        inconclusive("the model did not call a tool, so no permission was asked");
+        // No ask arrived. Whether the model reached for a tool at all is
+        // not visible from here, so this does not claim it — what is certain
+        // is that the permission path was not shown to work.
+        inconclusive("no permission ask arrived within 90s");
       }
 
       const prompt = ask.params.event;
@@ -75,8 +90,11 @@ export default {
     },
 
     "an unanswered ask is handed to a client that arrives late": async ({ backend, client }) => {
-      const created = await client.call("session.create",
-        { scene: "coding", project_root: process.cwd() }).catch(() => null);
+      const created = await client.call("session.create", {
+        scene: "coding",
+        project_root: process.cwd(),
+        options: { permission_mode: "default" },
+      }).catch(() => null);
       if (!created) inconclusive("no coding scene in this build, so no tool to ask about");
 
       await client.call("nest.attach", { session_id: created.session_id });
@@ -93,7 +111,7 @@ export default {
           { timeout: 90_000, describe: "a permission ask" });
       } catch {
         await finish(client, created.session_id);
-        inconclusive("the model did not call a tool, so no permission was asked");
+        inconclusive("no permission ask arrived within 90s");
       }
 
       // A client opening the session now has to be told what is waiting, or

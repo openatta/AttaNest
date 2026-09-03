@@ -5,6 +5,7 @@
 // nobody can act on.
 
 import { connect } from "../harness.mjs";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../../../ui/runtime/protocol.js";
 
 const assert = (cond, message) => { if (!cond) throw new Error(message); };
 
@@ -12,7 +13,7 @@ export default {
   tests: {
     "the handshake reports what was agreed": async ({ client }) => {
       const { protocol_version, contrib_api_version, topology, channels } = client.handshake;
-      assert(protocol_version === 3, `protocol ${protocol_version}`);
+      assert(protocol_version === PROTOCOL_VERSION, `protocol ${protocol_version}, expected ${PROTOCOL_VERSION}`);
       assert(contrib_api_version === 1, `contrib api ${contrib_api_version}`);
       assert(topology === client.topology, `got ${topology}, asked for ${client.topology}`);
       // Five semantics, named, whatever carries them.
@@ -50,7 +51,7 @@ export default {
     "a second handshake on one connection is refused": async ({ client }) => {
       if (client.topology !== "single_duplex") return;
       const again = await client.refused("nest.handshake", {
-        protocol_version: 3, contrib_api_version: 1, topology: "single_duplex",
+        protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex",
       });
       assert(again, "a second handshake was accepted");
       assert(/two answers|already/.test(again.message), `unhelpful: ${again.message}`);
@@ -60,7 +61,7 @@ export default {
       const response = await fetch(`http://127.0.0.1:${backend.port}/handshake`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: "wrong", protocol_version: 3, contrib_api_version: 1,
+        body: JSON.stringify({ token: "wrong", protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION,
           topology: "split_streams" }),
       });
       assert(response.status === 401, `status ${response.status}`);
@@ -68,7 +69,7 @@ export default {
 
     "two clients can be connected at once": async ({ backend, client }) => {
       const second = await connect(backend, { topology: client.topology });
-      assert(second.handshake.protocol_version === 3, "the second client did not handshake");
+      assert(second.handshake.protocol_version === PROTOCOL_VERSION, "the second client did not handshake");
       second.close();
     },
   },
@@ -76,7 +77,7 @@ export default {
 
 async function rawHandshake(backend, overrides) {
   const body = {
-    token: backend.token, protocol_version: 3, contrib_api_version: 1,
+    token: backend.token, protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION,
     topology: "single_duplex", ...overrides,
   };
   if (body.topology === "split_streams") {

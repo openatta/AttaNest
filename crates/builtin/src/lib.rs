@@ -46,8 +46,9 @@ type PackagesChanged = Box<dyn Fn(Vec<packages::Contributions>) + Send + Sync>;
 pub struct Builtin {
     hub: Arc<Hub>,
     store: Mutex<Store>,
-    /// One-shot upload grants: token → destination path.
-    uploads: Mutex<HashMap<String, PathBuf>>,
+    /// One-shot upload grants: token → where the bytes go and the ceiling
+    /// the issuing method advertised.
+    uploads: Mutex<HashMap<String, (PathBuf, usize)>>,
     upload_dir: PathBuf,
     /// Where projects live: what the picker opens on, and what "new project"
     /// creates into. A default, not a boundary — the fence is `$HOME` or an
@@ -107,7 +108,7 @@ impl Builtin {
             uploads: Mutex::new(HashMap::new()),
             upload_dir,
             projects_root,
-            max_upload_bytes: 32 * 1024 * 1024,
+            max_upload_bytes: nest_contract::MAX_UPLOAD_BYTES,
             on_packages_changed: Mutex::new(None),
         }))
     }
@@ -138,7 +139,7 @@ impl Builtin {
 
     /// Claim an upload grant. `None` means the token was never issued or has
     /// already been spent.
-    pub async fn claim_upload(&self, token: &str) -> Option<PathBuf> {
+    pub async fn claim_upload(&self, token: &str) -> Option<(PathBuf, usize)> {
         self.uploads.lock().await.remove(token)
     }
 
@@ -188,7 +189,7 @@ impl Builtin {
 /// asks through a trait rather than knowing whose they are.
 #[async_trait::async_trait]
 impl nest_transport::BulkStore for Builtin {
-    async fn claim(&self, token: &str) -> Option<PathBuf> {
+    async fn claim(&self, token: &str) -> Option<(PathBuf, usize)> {
         self.claim_upload(token).await
     }
 }

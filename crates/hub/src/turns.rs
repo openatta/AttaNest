@@ -22,6 +22,18 @@ use crate::{new_id, notification, require_session_id, Hub};
 impl Hub {
     pub(crate) async fn send(self: &Arc<Self>, subject: &Subject, params: Value) -> Result<Value, RpcError> {
         let session_id = require_session_id(&params)?;
+        // The session has to exist before a turn is opened on it.
+        //
+        // `session.run_turn` does not require one — handed an id it does not
+        // know, the engine makes a session and runs the turn there. That is
+        // reasonable for the engine and wrong for a client: a mistyped id
+        // came back as a settled turn, with the transcript in a session under
+        // an id the caller had never seen and could not ask for again, and a
+        // model call spent on it. The hub owns turns (§3.2), so refusing here
+        // is the hub's to do — and it costs the one call the send already
+        // makes to read the transcript depth.
+        self.engine_call("session.get", json!({"session_id": &session_id}))
+            .await?;
         // Sending implies watching. A client that skipped `nest.attach` would
         // otherwise get neither the turn's events nor its settlement — frames
         // go to watchers, and it would not be one.

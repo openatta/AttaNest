@@ -242,11 +242,14 @@ impl Builtin {
             .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
             .collect();
         let path = self.upload_dir.join(format!("{token}-{safe}"));
-        self.uploads.lock().await.insert(token.clone(), path.clone());
+        self.uploads.lock().await.insert(token.clone(), (path.clone(), self.max_upload_bytes));
         Ok(json!({
             "token": token,
             "url": format!("/upload?token={token}"),
             "path": path.display().to_string(),
+            // Said here as well as at hello, because this is the number this
+            // particular grant will be held to.
+            "max_bytes": self.max_upload_bytes,
         }))
     }
 

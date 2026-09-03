@@ -16,6 +16,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../ui/runtime/protocol.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -281,7 +282,7 @@ async function connect(port, token) {
     ws.send(JSON.stringify({ jsonrpc: "2.0", method, params: params || {}, id: i }));
   });
   await call("nest.handshake", {
-    protocol_version: 3, contrib_api_version: 1, topology: "single_duplex",
+    protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex",
   });
   return { call, close: () => ws.close() };
 }

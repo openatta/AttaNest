@@ -130,7 +130,16 @@ pub fn router(
     // carry that topology" are different answers, and only the second one
     // tells the client what to try next.
     let mut router = Router::new()
-        .route("/upload", post(bulk::upload))
+        // The framework's own default is 2 MB, which silently became the real
+        // ceiling for every route: a 3 MB upload was refused by axum with
+        // "failed to buffer the request body" while `nest.upload.begin` was
+        // handing out grants for 32 MB and `nest.plugins.upload` advertising
+        // 64. Raised here so the check that names Nest's own number is the
+        // one that fires.
+        .route(
+            "/upload",
+            post(bulk::upload).layer(axum::extract::DefaultBodyLimit::max(bulk::MAX_BODY_BYTES)),
+        )
         .route("/ws", get(ws::upgrade))
         // The two things available before admission. Minting a challenge
         // gives away nothing; redeeming a pairing code is how the first
@@ -140,8 +149,14 @@ pub fn router(
     if topologies.contains(&Topology::SplitStreams) {
         router = router
             .route("/handshake", post(split::establish))
-            .route("/rpc", post(split::rpc))
-            .route("/respond", post(split::respond))
+            // Deliberately *above* the frame ceiling, for the same reason
+            // the socket's own cap is: a body cut off at exactly the limit
+            // never reaches the check that names it, and the caller gets the
+            // framework's plain-text "failed to buffer the request body"
+            // where the other topology answers a JSON-RPC error. One
+            // semantic, two topologies (§3.3).
+            .route("/rpc", post(split::rpc).layer(over_ceiling()))
+            .route("/respond", post(split::respond).layer(over_ceiling()))
             .route("/events/session", get(split::session_events))
             .route("/events/host", get(split::host_events));
     }
@@ -150,6 +165,12 @@ pub fn router(
     }
     let face = state.statics.clone();
     (router.with_state(state), face)
+}
+
+/// A body limit high enough that Nest's own frame check is the one that
+/// answers, rather than the framework's.
+fn over_ceiling() -> axum::extract::DefaultBodyLimit {
+    axum::extract::DefaultBodyLimit::max(nest_contract::MAX_FRAME_BYTES + 1024 * 1024)
 }
 
 /// Origins a browser may connect from: loopback, any port.

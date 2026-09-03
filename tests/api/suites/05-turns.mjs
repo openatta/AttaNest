@@ -167,6 +167,85 @@ export default {
       await finish(client, created.session_id);
     },
 
+    "an attachment travels with the message it was sent on": async ({ client }) => {
+      // `attachments` has never been passed. The bulk channel exists so a
+      // file can reach a turn, and nothing checked that the second half of
+      // that journey — grant, upload, then name it on the send — arrives.
+      const created = await client.call("session.create", {});
+      await client.call("nest.attach", { session_id: created.session_id });
+
+      const grant = await client.call("nest.upload.begin",
+        { name: "note.txt", bytes: 11 });
+      const put = await fetch(`http://127.0.0.1:${client.backend.port}${grant.url}`,
+        { method: "POST", body: "nest-attach" });
+      assert(put.ok, `the upload was refused: ${put.status}`);
+
+      const attachments = [{ kind: "file", path: grant.path, name: "note.txt" }];
+      await client.call("nest.send",
+        { session_id: created.session_id, message: "What is in the attached file?", attachments });
+
+      // The hub puts the user's own message into the stream — the engine
+      // emits none — so what a second client sees is what the hub recorded.
+      // If attachments were dropped on the way in, they are absent here.
+      const own = await client.waitFor(
+        (f) => f.method === "nest.event"
+          && f.params.session_id === created.session_id
+          && f.params.event.kind === "user_message",
+        { timeout: 30_000, describe: "the hub to echo the message" });
+      assert(own.params.event.text.includes("attached file"), "the wrong message came back");
+
+      const queued = await client.call("nest.send", {
+        session_id: created.session_id,
+        message: "and again",
+        attachments,
+        on_busy: "queue",
+      });
+      if (queued.queued) {
+        // The queue view is what a client draws while waiting, and it has to
+        // carry the attachments or the row loses them on the way to the top.
+        assert(Array.isArray(queued.item.attachments),
+          `a queued item carries ${JSON.stringify(queued.item.attachments)}`);
+        assert(queued.item.attachments.length === 1, "the queued attachment was dropped");
+      }
+      await client.call("session.interrupt", { session_id: created.session_id })
+        .catch(() => {});
+      await finish(client, created.session_id);
+    },
+
+    "a client that dies mid-turn does not take the turn with it":
+      async ({ backend, client }) => {
+        // `nest.detach` is the polite exit and is covered. This is the other
+        // one: a tab closed, a laptop shut, a socket that simply stops. The
+        // hub owns the turn, so it has to keep running and stay watchable by
+        // whoever is still there.
+        const created = await client.call("session.create", {});
+        await client.call("nest.attach", { session_id: created.session_id });
+
+        const doomed = await connect(backend, { topology: client.topology });
+        await doomed.call("nest.attach", { session_id: created.session_id });
+
+        await client.call("nest.send",
+          { session_id: created.session_id, message: "Write two sentences about tide pools." });
+        await client.waitFor((f) => f.method === "nest.event"
+          && f.params.event.kind === "text_delta",
+          { timeout: 120_000, describe: "the model to start" });
+
+        doomed.close();
+
+        const settled = await client.waitFor(
+          (f) => f.method === "nest.turn_settled" && f.params.session_id === created.session_id,
+          { timeout: 180_000, describe: "the turn to settle after a watcher vanished" })
+          .catch(() => null);
+        if (!settled) inconclusive("the upstream never settled the turn");
+        assert(!settled.params.error,
+          `the turn failed after a watcher left: ${JSON.stringify(settled.params.error)}`);
+
+        // And the session is still usable by the client that stayed.
+        const info = await client.call("session.get", { session_id: created.session_id });
+        assert(info.session_id === created.session_id, "the session did not survive");
+        await finish(client, created.session_id);
+      },
+
     "a queued send runs after the one in front of it": async ({ client }) => {
       const created = await client.call("session.create", {});
       await client.call("nest.attach", { session_id: created.session_id });

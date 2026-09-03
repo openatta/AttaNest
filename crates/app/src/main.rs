@@ -188,7 +188,15 @@ async fn main() -> anyhow::Result<()> {
             "replaying recordings; no model will be called"
         );
     }
-    let hub = Hub::new(engine, registry, cli.replay_dir.clone()).await?;
+    // The three ceilings, assembled where all three are known. The hub
+    // reports them at hello and the transport enforces the frame one; both
+    // read this rather than restating a number.
+    let limits = nest_contract::Limits {
+        max_frame_bytes: nest_contract::MAX_FRAME_BYTES,
+        max_upload_bytes: nest_contract::MAX_UPLOAD_BYTES,
+        replay_max_frames: nest_hub::REPLAY_MAX_FRAMES,
+    };
+    let hub = Hub::new(engine, registry, cli.replay_dir.clone(), limits).await?;
 
     // ── Built-ins, through the public door ──────────────────────────────
     let builtin = Builtin::new(hub.clone(), roots.state.clone(), roots.projects.clone())?;

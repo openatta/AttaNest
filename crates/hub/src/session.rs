@@ -19,8 +19,19 @@ pub(crate) struct QueueItem {
 }
 
 impl QueueItem {
+    /// What a client draws for a message that is waiting its turn.
+    ///
+    /// Attachments are in it because the row is the only place a queued
+    /// message is visible: without them a "look at this file" waiting behind
+    /// a running turn draws as a bare question, and there is no other call
+    /// that would tell the client otherwise. They reach the turn either way —
+    /// what was missing was the client being able to see that they would.
     pub fn view(&self) -> Value {
-        json!({"item_id": self.item_id, "message": self.message})
+        json!({
+            "item_id": self.item_id,
+            "message": self.message,
+            "attachments": self.attachments,
+        })
     }
 }
 

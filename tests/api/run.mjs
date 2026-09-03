@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Inconclusive, connect, exercisedMethods, hasModel, loadEnv, startBackend } from "./harness.mjs";
+import { Inconclusive, connect, errorCodesSeen, erroredMethods, exercisedMethods, hasModel, loadEnv, startBackend } from "./harness.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -83,6 +83,30 @@ console.log(
   `backend on :${backend.port} · topology ${topology} · `
   + `model ${live ? (model ? "live" : "asked for but not configured") : replay ? "replayed" : "none"}\n`);
 
+/** A replaying backend of its own, for a suite whose point is determinism.
+ *
+ * `--replay-dir` is a whole-process decision, so in `--live` the shared
+ * backend records rather than replays — and a suite written against fixtures
+ * quietly became a live-model suite whose assertions depend on what the model
+ * felt like doing. `13-agent` failed that way roughly one run in five, always
+ * in a full run and never alone, which is the shape of a flake nobody finds.
+ */
+async function replayingBackend(port) {
+  const path = join(tmpdir(), `nest-api-replay-${process.pid}.toml`);
+  writeFileSync(path, [
+    "[transport]",
+    'topologies = ["single_duplex", "split_streams"]',
+    'host = "127.0.0.1"',
+    `port = ${port}`,
+    "",
+  ].join("\n"));
+  return startBackend({
+    port,
+    env: { ANTHROPIC_API_KEY: "api-tests-replayed" },
+    args: ["--profile", path, "--replay-dir", fixtures],
+  });
+}
+
 try {
   for (const suite of suites) {
     // A suite needing a model runs against a fixture unless it asked for a
@@ -100,7 +124,13 @@ try {
       continue;
     }
     console.log(`— ${suite.name}`);
-    const shared = suite.setup ? await suite.setup({ backend, env }) : {};
+    // A suite that declares itself replayed gets a replaying backend whatever
+    // mode the run is in. Its whole value is that the same tool is called at
+    // the same point every time; against a live model it is a different test
+    // wearing the same name.
+    const own = suite.replayed && !replay ? await replayingBackend(Number(option("port", 4270)) + 20) : null;
+    const target = own ?? backend;
+    const shared = suite.setup ? await suite.setup({ backend: target, env }) : {};
     for (const [title, run] of Object.entries(suite.tests)) {
       // A client per test, not per suite.
       //
@@ -109,10 +139,10 @@ try {
       // green and red on alternate runs for a while. A handshake costs
       // milliseconds; a test whose result depends on what ran before it costs
       // considerably more than that.
-      const client = await connect(backend, { topology });
+      const client = await connect(target, { topology });
       const started = Date.now();
       try {
-        await run({ client, backend, env, model, replay, ...shared });
+        await run({ client, backend: target, env, model, replay: replay || Boolean(own), ...shared });
         passed += 1;
         console.log(`  ok   ${title}  (${Date.now() - started}ms)`);
       } catch (e) {
@@ -129,6 +159,7 @@ try {
         client.close();
       }
     }
+    if (own) own.stop();
     if (suite.teardown) await suite.teardown({ backend, env, ...shared }).catch(() => {});
   }
 
@@ -145,12 +176,28 @@ try {
   const untested = reachable.filter((m) => !called.has(m)).sort();
   const percent = ((reachable.length - untested.length) / reachable.length) * 100;
 
+  // The second axis. A method that has only ever answered has never had its
+  // arguments checked or its refusal walked, and that is where most of its
+  // lines are. Measured, not declared — see `erroredMethods`.
+  const errored = new Set(erroredMethods());
+  const neverFailed = reachable.filter((m) => called.has(m) && !errored.has(m)).sort();
+  const failedCount = reachable.filter((m) => errored.has(m)).length;
+
   console.log(`\n── coverage ──`);
-  console.log(`  ${reachable.length - untested.length}/${reachable.length} reachable methods exercised (${percent.toFixed(0)}%)`);
+  console.log(`  ${reachable.length - untested.length}/${reachable.length} reachable methods called (${percent.toFixed(0)}%)`);
   if (untested.length) {
-    console.log(`  not exercised:`);
+    console.log(`  never called:`);
     for (const m of untested) console.log(`    ${m}`);
   }
+  console.log(`  ${failedCount}/${reachable.length} also driven into an error `
+    + `(${((failedCount / reachable.length) * 100).toFixed(0)}%)`);
+  if (neverFailed.length) {
+    console.log(`  happy path only:`);
+    for (const m of neverFailed) console.log(`    ${m}`);
+  }
+  const codes = errorCodesSeen();
+  console.log(`  ${codes.length} distinct error codes seen: `
+    + codes.map(([code, via]) => `${code} (${via})`).join(", "));
 
   console.log(`\n${passed} passed, ${failed} failed`
     + `${inconclusive ? `, ${inconclusive} inconclusive` : ""}`

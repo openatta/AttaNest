@@ -4,6 +4,10 @@
 // All of it registers through the contribution registry, so exercising it
 // here also exercises that path.
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { finish } from "../harness.mjs";
 
 const assert = (cond, message) => { if (!cond) throw new Error(message); };
@@ -23,14 +27,66 @@ export default {
       const collapsed = await client.call("nest.workspaces.update", { id, collapsed: true });
       assert(collapsed.workspace.collapsed === true, "collapse did not persist");
 
-      // Moving one, relative to an anchor — not handing over a whole order.
-      // The list is the store's; a caller that sent an order would be
-      // deciding what exists as well as where it sits.
-      await client.call("nest.workspaces.reorder", { id });
-
       await client.call("nest.workspaces.remove", { id });
       const after = (await client.call("nest.workspaces.list")).workspaces.length;
       assert(after === before, `${after} workspaces left, started with ${before}`);
+    },
+
+    "reordering moves the one named, relative to the anchor it names":
+      async ({ client }) => {
+        // This was a call with an `id` and nothing else, against a list with
+        // one workspace in it — which moves that workspace to the end of a
+        // list of one. It passed, it exercised the method, and it could not
+        // have failed. Reordering needs three workspaces and an anchor before
+        // it means anything.
+        // Three distinct directories: a workspace is identified by its path,
+        // and creating a second one on a path that already has one hands back
+        // the existing row. Three creates on `process.cwd()` make one
+        // workspace, which is a list too short to reorder.
+        const ids = [];
+        const dirs = [];
+        for (const name of ["reorder-a", "reorder-b", "reorder-c"]) {
+          const dir = mkdtempSync(join(tmpdir(), `nest-${name}-`));
+          dirs.push(dir);
+          const made = await client.call("nest.workspaces.create", { path: dir, title: name });
+          assert(made.existed === false, `${name} reused an existing workspace`);
+          ids.push(made.workspace.id);
+        }
+        const order = () => client.call("nest.workspaces.list")
+          .then(({ workspaces }) => workspaces.map((w) => w.id).filter((i) => ids.includes(i)));
+
+        const [a, b, c] = ids;
+        assert((await order()).join() === [a, b, c].join(), "the three did not start in order");
+
+        // Move the last one in front of the first.
+        await client.call("nest.workspaces.reorder", { id: c, before_id: a });
+        assert((await order()).join() === [c, a, b].join(),
+          `after moving c before a the order is ${(await order()).join()}`);
+
+        // No anchor means the end — which is what the old call was doing
+        // without anyone noticing, because the list was one long.
+        await client.call("nest.workspaces.reorder", { id: c });
+        assert((await order()).join() === [a, b, c].join(),
+          `after moving c to the end the order is ${(await order()).join()}`);
+
+        // An anchor that does not exist puts it at the end rather than
+        // failing: the caller's view of the list can be one change stale, and
+        // refusing would make every reorder a read-then-write.
+        await client.call("nest.workspaces.reorder", { id: a, before_id: "no-such-workspace" });
+        assert((await order()).join() === [b, c, a].join(),
+          `with an unknown anchor the order is ${(await order()).join()}`);
+
+        for (const id of ids) await client.call("nest.workspaces.remove", { id });
+        for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+      },
+
+    "reordering something that is not there changes nothing": async ({ client }) => {
+      const before = (await client.call("nest.workspaces.list")).workspaces.map((w) => w.id);
+      const e = await client.refused("nest.workspaces.reorder", { id: "no-such-workspace" });
+      const after = (await client.call("nest.workspaces.list")).workspaces.map((w) => w.id);
+      assert(before.join() === after.join(),
+        `the list changed: ${before.join()} → ${after.join()}`);
+      if (e) assert(e.message, "refused without saying why");
     },
 
     "creating a workspace on a path that is not a directory is refused": async ({ client }) => {

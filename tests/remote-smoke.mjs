@@ -20,6 +20,7 @@
 //   node tests/remote-smoke.mjs <port> <token> <pairing-code>
 
 import { generateKeyPairSync, sign as nodeSign } from "node:crypto";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../ui/runtime/protocol.js";
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; // the test's cert is self-signed
 
@@ -61,7 +62,7 @@ const challenge = async () =>
 
 const handshake = (extra) =>
   post("/handshake", {
-    token, protocol_version: 3, contrib_api_version: 1, topology: "split_streams", ...extra,
+    token, protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "split_streams", ...extra,
   });
 
 /* ── the token alone is not enough ────────────────────────────────────── */

@@ -106,6 +106,10 @@ pub struct Hub {
     /// Held here rather than resolved per call because it changes when a
     /// package is installed, not when someone asks.
     ui_contributions: RwLock<Value>,
+    /// The ceilings a client has to respect, assembled once by the layer that
+    /// knows all three. Reported rather than restated: `hello` used to build
+    /// this object by hand and left `max_upload_bytes` out of it entirely.
+    limits: Value,
 }
 
 impl Hub {
@@ -113,6 +117,7 @@ impl Hub {
         engine: Engine,
         registry: Registry,
         replay_from: Option<std::path::PathBuf>,
+        limits: nest_contract::Limits,
     ) -> anyhow::Result<Arc<Self>> {
         let inner = Arc::new(Mutex::new(Inner::default()));
         let sink: Sink = Arc::new(HubSink { inner: inner.clone() });
@@ -126,6 +131,7 @@ impl Hub {
             next_client: AtomicU64::new(1),
             registry: RwLock::new(registry),
             ui_contributions: RwLock::new(json!([])),
+            limits: serde_json::to_value(limits).unwrap_or(json!({})),
         });
         // Host-level notifications go to every client.
         hub.engine_call("daemon.subscribeEvents", json!({})).await.ok();
@@ -217,10 +223,7 @@ impl Hub {
             // each one and the module decides what it registers, so grouping
             // by point here would be a shape nothing reads.
             "contributions": self.ui_contributions.read().await.clone(),
-            "limits": {
-                "max_frame_bytes": 16 * 1024 * 1024,
-                "replay_max_frames": replay::MAX_FRAMES,
-            },
+            "limits": self.limits.clone(),
         }))
     }
 

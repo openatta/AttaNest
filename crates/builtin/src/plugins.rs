@@ -55,7 +55,7 @@ impl Builtin {
             .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
             .collect();
         let path = self.upload_dir().join(format!("{token}-{safe}"));
-        self.uploads.lock().await.insert(token.clone(), path.clone());
+        self.uploads.lock().await.insert(token.clone(), (path.clone(), MAX_PACKAGE_BYTES));
         Ok(json!({
             "token": token,
             "url": format!("/upload?token={token}"),

@@ -90,11 +90,14 @@ impl AuditSink for TimelineAudit {
 fn is_consequential(method: &str) -> bool {
     matches!(
         method,
-        "plugin.install"
-            | "plugin.uninstall"
-            | "plugin.enable"
-            | "plugin.disable"
-            | "nest.plugins.install"
+        "nest.plugins.install"
+            | "nest.plugins.uninstall"
+            | "nest.plugins.enable"
+            | "nest.plugins.disable"
+            // Picks up whatever is in the directory now, including a package
+            // put there by hand — so it can change the active set without any
+            // other call having been made.
+            | "nest.plugins.reload"
             | "nest.devices.pair.complete"
             | "nest.devices.revoke"
             | "nest.settings.set"
@@ -112,8 +115,33 @@ mod tests {
     #[test]
     fn only_consequential_allows_are_written() {
         assert!(is_consequential("nest.devices.revoke"));
-        assert!(is_consequential("plugin.install"));
+        assert!(is_consequential("nest.plugins.install"));
         assert!(!is_consequential("nest.sessions"));
         assert!(!is_consequential("session.history"));
+    }
+
+    /// Every extension lifecycle call is consequential, not just installing.
+    ///
+    /// This list had drifted the other way: it still named the engine's
+    /// `plugin.*`, which stopped being reachable when the lifecycle moved
+    /// behind `nest.plugins.*`, and three of the four replacements were
+    /// missing — so disabling and uninstalling a package left no trace.
+    #[test]
+    fn the_whole_extension_lifecycle_is_audited() {
+        for method in nest_builtin::METHODS {
+            // The lifecycle is exactly the `nest.plugins.*` calls that change
+            // what is installed; `upload` hands over a file and `list` reads.
+            if !method.starts_with("nest.plugins.")
+                || matches!(*method, "nest.plugins.upload" | "nest.plugins.list")
+            {
+                continue;
+            }
+            assert!(is_consequential(method), "{method} changes what is installed and is not audited");
+        }
+        // And nothing in the list is a name a client can no longer reach:
+        // an audit rule for an unreachable method is a rule that never fires.
+        for stale in ["plugin.install", "plugin.uninstall", "plugin.enable", "plugin.disable"] {
+            assert!(!is_consequential(stale), "{stale} is audited but not reachable");
+        }
     }
 }

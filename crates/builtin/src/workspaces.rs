@@ -164,6 +164,7 @@ impl Builtin {
     /// and nothing else in the system sees it.
     pub(crate) async fn session_rename(&self, params: Value) -> Result<Value, RpcError> {
         let session_id = require_session_id(&params)?;
+        self.session_must_exist(&session_id).await?;
         let title = params
             .get("title")
             .and_then(Value::as_str)
@@ -180,6 +181,7 @@ impl Builtin {
 
     pub(crate) async fn session_archive(&self, params: Value) -> Result<Value, RpcError> {
         let session_id = require_session_id(&params)?;
+        self.session_must_exist(&session_id).await?;
         let archived = params
             .get("archived")
             .and_then(Value::as_bool)
@@ -190,6 +192,19 @@ impl Builtin {
             meta.archived = archived;
         });
         Ok(json!({"session_id": session_id, "archived": archived}))
+    }
+
+    /// Refuse to write an overlay row for a session the engine does not have.
+    ///
+    /// These two write into a map keyed by session id with
+    /// `entry(id).or_default()`, so any id at all grew a row — and the file
+    /// they live in is never cleaned. A mistyped id left a title behind that
+    /// joined to nothing, forever, and the caller was told it worked.
+    async fn session_must_exist(&self, session_id: &str) -> Result<(), RpcError> {
+        self.hub
+            .engine_call("session.get", json!({"session_id": session_id}))
+            .await
+            .map(|_| ())
     }
 
     pub(crate) async fn prefs_set(&self, params: Value) -> Result<Value, RpcError> {

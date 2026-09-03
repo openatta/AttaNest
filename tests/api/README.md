@@ -31,6 +31,35 @@ settles in ~300ms, which makes "a client arrives mid-turn" a race rather than
 a test), and `11-recordings` is about the recording being *written*, which a
 replaying session does not do.
 
+## Two coverage numbers, and what the second one is for
+
+```
+56/56 reachable methods called (100%)
+21/56 also driven into an error (38%)
+9 distinct error codes seen: -31000 (config.setProvider), …
+```
+
+The first is measured against what the backend says a client may call
+(`nest.reachable`), not a list kept by hand — a hand-kept list drifts the
+moment a method is added, and it drifts in the direction that flatters.
+
+The second exists because the first was satisfying. Every method had been
+called and the suite was green, while nineteen of them had been called exactly
+once, two of those with no assertion on the answer at all, and the whole API
+had produced **two** distinct error codes across every run. A method that has
+only ever answered has never had its arguments checked, its preconditions
+tested, or its refusal walked, and there are more lines behind those three
+than behind the answer. Writing this suite found a mistyped session id
+silently creating a session and spending a model call, a published frame
+ceiling nothing enforced, and an upload limit the web framework's untouched
+default had quietly cut to a sixteenth of what was advertised.
+
+**The second number will not reach 100%, and should not be pushed there.**
+Seventeen of these methods take no arguments — `nest.hello`, `daemon.ping`,
+every `*.list` — and have no failure mode to reach. What the number is for is
+the other kind: a method with arguments and preconditions that has never once
+been told no. When it drops after a method is added, that is the signal.
+
 ## Where this sits among the other tests
 
 | | drives | needs |

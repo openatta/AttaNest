@@ -69,7 +69,15 @@ pub async fn upgrade(
         )
             .into_response();
     }
-    upgrade.on_upgrade(move |socket| connection(socket, state))
+    // Above Nest's own ceiling on purpose. The WebSocket library's default
+    // frame cap is 16 MiB — the same size — so a frame one byte over the
+    // published limit was killed at the protocol layer and the connection
+    // simply died: no error, no reason, and a client left to guess which
+    // frame did it. Raised so the check below is the one that answers.
+    upgrade
+        .max_message_size(nest_contract::MAX_FRAME_BYTES + 1024 * 1024)
+        .max_frame_size(nest_contract::MAX_FRAME_BYTES + 1024 * 1024)
+        .on_upgrade(move |socket| connection(socket, state))
 }
 
 async fn connection(socket: WebSocket, state: AppState) {
@@ -99,6 +107,26 @@ async fn connection(socket: WebSocket, state: AppState) {
             Message::Close(_) => break,
             _ => continue,
         };
+        // Refused with the ceiling in the message, and the connection stays
+        // open. Letting it through would mean `hello` publishes a limit that
+        // nothing checks; dropping the connection instead would leave the
+        // client guessing at which frame did it.
+        if text.len() > nest_contract::MAX_FRAME_BYTES {
+            let id = serde_json::from_str::<Value>(&text)
+                .ok()
+                .and_then(|v| v.get("id").cloned())
+                .unwrap_or(Value::Null);
+            let _ = tx.send(error_frame(
+                id,
+                codes::INVALID_REQUEST,
+                format!(
+                    "frame is {} bytes; the ceiling is {} — use the bulk channel",
+                    text.len(),
+                    nest_contract::MAX_FRAME_BYTES
+                ),
+            ));
+            continue;
+        }
         let Ok(value) = serde_json::from_str::<Value>(&text) else {
             let _ = tx.send(error_frame(Value::Null, codes::PARSE_ERROR, "invalid JSON"));
             continue;

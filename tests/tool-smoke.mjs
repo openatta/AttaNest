@@ -33,10 +33,17 @@ const text = (node) => (node ? node.textContent.replace(/\s+/g, " ").trim() : ""
 const fail = (m) => { console.log("FAIL:", m); process.exitCode = 1; };
 const ok = (m) => console.log("ok —", m);
 const running = () => $("send").classList.contains("stop");
+/** Rows that are a tool call, and not one of the other things drawn as a row.
+ *
+ * Named by exclusion because the flow draws several kinds of row-item and
+ * only one of them is a tool. The request envelope was missing from this
+ * list, and it appears a beat after the turn settles — so on a quick run the
+ * tool row was still last and on a slow one the envelope was, and the test
+ * expanded that instead and reported "no input". Picking the last row is only
+ * safe once the list holds one kind of thing. */
+const NOT_A_TOOL = [T("flow.injectedContext"), T("flow.compacted"), T("request.title")];
 const toolRows = () =>
-  all(".row-item").filter(
-    (r) => ![T("flow.injectedContext"), T("flow.compacted")].includes(text(r.querySelectorAll(".name")[0])),
-  );
+  all(".row-item").filter((r) => !NOT_A_TOOL.includes(text(r.querySelectorAll(".name")[0])));
 
 await sleep(2500);
 if ($("conn").className !== "on") {

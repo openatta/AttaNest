@@ -9,6 +9,7 @@
 //
 // `tests/package-e2e.mjs` runs the whole path with a real package.
 
+import { METHOD_NOT_FOUND, REFUSED } from "../../../ui/runtime/protocol.js";
 const assert = (cond, message) => { if (!cond) throw new Error(message); };
 
 export default {
@@ -40,7 +41,7 @@ export default {
       const e = await client.refused("nest.plugins.install",
         { path: grant.path, name: "x", version: "1.0.0" });
       assert(e, "installing a file that does not exist succeeded");
-      assert(e.code !== -32000, `refused by the host rather than the engine: ${e.message}`);
+      assert(e.code !== REFUSED, `refused by the host rather than the engine: ${e.message}`);
     },
 
     "the list says whether there is a plugin subsystem at all": async ({ client }) => {
@@ -82,14 +83,14 @@ export default {
     "management calls reach the engine rather than stopping here": async ({ client }) => {
       // Whether the engine minds being asked about a package that is not
       // installed is the engine's business. What is checked here is that the
-      // call arrives — -32601 would mean nothing routes it, which is how four
+      // call arrives — METHOD_NOT_FOUND would mean nothing routes it, which is how four
       // dead management calls once sat behind a screen nobody could reach.
       for (const method of ["nest.plugins.enable", "nest.plugins.disable",
                             "nest.plugins.uninstall"]) {
         const e = await client.refused(method, { name: "nothing-is-installed" });
         if (e) {
-          assert(e.code !== -32601, `${method} routes nowhere`);
-          assert(e.code !== -32000, `${method} was refused by the host: ${e.message}`);
+          assert(e.code !== METHOD_NOT_FOUND, `${method} routes nowhere`);
+          assert(e.code !== REFUSED, `${method} was refused by the host: ${e.message}`);
         }
       }
       const reloaded = await client.call("nest.plugins.reload");

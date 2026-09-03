@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadEnv, hasModel, sleep } from "./harness.mjs";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../../ui/runtime/protocol.js";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const [name, prompt] = process.argv.slice(2);
@@ -60,7 +61,7 @@ ws.onmessage = (e) => {
   if (frame.method) events.push(frame);
 };
 await new Promise((r) => { ws.onopen = r; });
-await call("nest.handshake", { protocol_version: 3, contrib_api_version: 1, topology: "single_duplex" });
+await call("nest.handshake", { protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex" });
 
 const session = await call("session.create", { scene: "coding", project_root: ROOT });
 await call("nest.attach", { session_id: session.session_id });

@@ -24,6 +24,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../../ui/runtime/protocol.js";
 
 export const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -60,12 +61,18 @@ export function hasModel(env) {
  * A fresh `--atta-dir` every run, because a suite that inherits yesterday's
  * sessions is a suite whose failures depend on what somebody did yesterday.
  */
-export async function startBackend({ port, env = {}, args = [] } = {}) {
+export async function startBackend({ port, env = {}, args = [], seed } = {}) {
   const binary = join(ROOT, "target", "release", "nest");
   if (!existsSync(binary)) {
     execFileSync("cargo", ["build", "--release", "-p", "nest"], { cwd: ROOT, stdio: "inherit" });
   }
   const scratch = mkdtempSync(join(tmpdir(), "nest-api-"));
+  // A hook for state that has to exist *before* the engine reads it. Some
+  // behaviour is only reachable at startup — an MCP server that fails to
+  // connect emits the only host events this build produces, and no method
+  // can provoke one — so a suite that needs it seeds the directory and gets
+  // its own backend.
+  if (seed) seed(scratch);
   const child = spawn(
     binary,
     ["--port", String(port), "--ui-dir", join(ROOT, "ui"),
@@ -110,9 +117,39 @@ export async function startBackend({ port, env = {}, args = [] } = {}) {
 
 /** Every method any client of this harness has called. */
 const exercised = new Set();
+/** Every method that has been driven into an error at least once. */
+const refuted = new Set();
+/** Every distinct error code seen, and one method that produced it. */
+const codesSeen = new Map();
 
 export function exercisedMethods() {
   return [...exercised].sort();
+}
+
+/**
+ * Methods that have been made to fail, and the codes that came back.
+ *
+ * The second axis of coverage, and the one that is hard to fake. "Was this
+ * method called" is satisfied by any happy path; a method that has never
+ * returned an error has never had its arguments checked, its preconditions
+ * tested, or its refusal path walked — and there are more lines behind those
+ * than behind the answer. Counted here rather than declared in a list,
+ * because a list of what is covered drifts in the direction that flatters.
+ */
+export function erroredMethods() {
+  return [...refuted].sort();
+}
+
+export function errorCodesSeen() {
+  return [...codesSeen.entries()].sort((a, b) => b[0] - a[0]);
+}
+
+/** Called from the one place in each topology where an error frame surfaces. */
+function noteError(method, error) {
+  refuted.add(method);
+  if (error && typeof error.code === "number" && !codesSeen.has(error.code)) {
+    codesSeen.set(error.code, method);
+  }
 }
 
 /**
@@ -140,6 +177,7 @@ async function connectDuplex(backend) {
     const frame = JSON.parse(e.data);
     if (frame.id != null && pending.has(frame.id)) {
       const slot = pending.get(frame.id);
+      if (slot && frame.error) noteError(slot.method, frame.error);
       pending.delete(frame.id);
       frame.error ? slot.rej(frame.error) : slot.res(frame.result);
       return;
@@ -155,12 +193,12 @@ async function connectDuplex(backend) {
     exercised.add(method);
     return new Promise((res, rej) => {
       const i = id++;
-      pending.set(i, { res, rej });
+      pending.set(i, { res, rej, method });
       ws.send(JSON.stringify({ jsonrpc: "2.0", method, params: params || {}, id: i }));
     });
   };
   const handshake = await call("nest.handshake", {
-    protocol_version: 3, contrib_api_version: 1, topology: "single_duplex",
+    protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex",
   });
   return client({ topology: "single_duplex", handshake, call, events, waiters,
     close: () => ws.close(), backend });
@@ -173,7 +211,7 @@ async function connectSplit(backend) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      token: backend.token, protocol_version: 3, contrib_api_version: 1,
+      token: backend.token, protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION,
       topology: "split_streams",
     }),
   }).then((r) => r.json());
@@ -203,7 +241,10 @@ async function connectSplit(backend) {
         body: JSON.stringify({ jsonrpc: "2.0", method, params: params || {}, id: id++ }),
       },
     ).then((r) => r.json());
-    if (frame.error) throw frame.error;
+    if (frame.error) {
+      noteError(method, frame.error);
+      throw frame.error;
+    }
     return frame.result;
   };
   return client({ topology: "split_streams", handshake, call, events, waiters,

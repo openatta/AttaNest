@@ -14,7 +14,10 @@ pub mod handshake;
 pub mod subject;
 
 pub use frame::{Channel, Frame, FrameSink};
-pub use handshake::{Handshake, Limits, Topology, CONTRIB_API_VERSION, PROTOCOL_VERSION};
+pub use handshake::{
+    Handshake, Limits, Topology, CONTRIB_API_VERSION, MAX_FRAME_BYTES, MAX_UPLOAD_BYTES,
+    PROTOCOL_VERSION,
+};
 pub use subject::Subject;
 
 use serde::{Deserialize, Serialize};
@@ -56,8 +59,23 @@ impl std::fmt::Display for RpcError {
 
 impl std::error::Error for RpcError {}
 
-/// The codes Nest itself returns. Engine codes pass through untouched, so
-/// these sit outside AttaCore's ranges.
+/// The codes Nest itself returns.
+///
+/// # Two bands, and why they do not overlap
+///
+/// The five below are JSON-RPC's own predefined codes. They mean the same
+/// thing whichever layer produced them — "your params are wrong" needs no
+/// attribution — so both sides using them is correct rather than a clash.
+///
+/// Everything else is different. AttaCore's codes live in JSON-RPC's reserved
+/// implementation band (`-32000` … `-32099`); **Nest's live outside it**, at
+/// `-31000`, which the specification leaves to applications. The boundary is
+/// therefore a rule of the protocol rather than an agreement about who grows
+/// which way, and that matters because the two collided once: `REFUSED` was
+/// `-32000`, which is also AttaCore's `SESSION_NOT_FOUND`, so "you may not
+/// call this" and "there is no such session" arrived as the same number — and
+/// the API tests used that number as their only way to tell the host's
+/// refusal from the engine's answer.
 pub mod codes {
     pub const PARSE_ERROR: i32 = -32700;
     pub const INVALID_REQUEST: i32 = -32600;
@@ -69,9 +87,9 @@ pub mod codes {
     /// `METHOD_NOT_FOUND` on purpose: "you may not" and "there is no such
     /// thing" are different answers, and a client that cannot tell them apart
     /// reports the wrong bug.
-    pub const REFUSED: i32 = -32000;
+    pub const REFUSED: i32 = -31000;
     /// The handshake did not agree — version, contribution API, or topology.
-    pub const HANDSHAKE_REFUSED: i32 = -32001;
+    pub const HANDSHAKE_REFUSED: i32 = -31001;
 }
 
 /// The process's single admission point.

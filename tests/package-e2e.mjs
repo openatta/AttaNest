@@ -18,6 +18,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../ui/runtime/protocol.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PORT = 4288;
@@ -79,7 +80,7 @@ const call = (method, params) => new Promise((res, rej) => {
   pending.set(i, { res, rej });
   ws.send(JSON.stringify({ jsonrpc: "2.0", method, params: params || {}, id: i }));
 });
-await call("nest.handshake", { protocol_version: 3, contrib_api_version: 1, topology: "single_duplex" });
+await call("nest.handshake", { protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex" });
 
 /* ── install it ───────────────────────────────────────────────────────── */
 

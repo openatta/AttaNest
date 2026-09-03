@@ -15,6 +15,10 @@
 import { readFileSync } from "node:fs";
 
 import { loadApp } from "./dom.mjs";
+import { PROTOCOL_VERSION } from "../ui/runtime/protocol.js";
+
+/** Nest's own, outside the band the engine's codes live in. */
+const HANDSHAKE_REFUSED = -31001;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const text = (node) => (node ? node.textContent : "");
@@ -63,7 +67,7 @@ function socketThat(reply, seen) {
     WebSocket: socketThat((method, params) => {
       if (method === "nest.handshake") {
         return {
-          protocol_version: 3,
+          protocol_version: PROTOCOL_VERSION,
           contrib_api_version: 1,
           topology: params.topology,
           topologies: ["single_duplex"],
@@ -72,7 +76,7 @@ function socketThat(reply, seen) {
       }
       if (method === "nest.reachable") return { methods: [] };
       if (method === "nest.hello") {
-        return { protocol_version: 3, contributions: {}, engine: {}, scenes: [], commands: [], limits: {} };
+        return { protocol_version: PROTOCOL_VERSION, contributions: {}, engine: {}, scenes: [], commands: [], limits: {} };
       }
       if (method === "nest.sessions") return { sessions: [] };
       return {};
@@ -137,7 +141,7 @@ function socketThat(reply, seen) {
   const asked = [];
   const app = await loadApp({
     WebSocket: socketThat(
-      (m) => (m === "nest.handshake" ? { __error: { code: -32001, message: reason } } : {}),
+      (m) => (m === "nest.handshake" ? { __error: { code: HANDSHAKE_REFUSED, message: reason } } : {}),
       asked,
     ),
   });

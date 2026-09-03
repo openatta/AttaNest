@@ -9,6 +9,7 @@
 
 import { loadApp } from "./dom.mjs";
 import zh from "../ui/runtime/i18n/zh-CN.js";
+import { PROTOCOL_VERSION } from "../ui/runtime/protocol.js";
 
 /** Expected copy comes from the same dictionary the app renders from. */
 const T = (key, vars) => (vars
@@ -86,7 +87,7 @@ function answer(method, params) {
     // at the end of this file.
     case "nest.handshake":
       return {
-        protocol_version: 3,
+        protocol_version: PROTOCOL_VERSION,
         contrib_api_version: 1,
         topology: params.topology,
         topologies: ["single_duplex"],
@@ -98,7 +99,7 @@ function answer(method, params) {
       return { methods: [] };
     case "nest.hello":
       return {
-        protocol_version: 3,
+        protocol_version: PROTOCOL_VERSION,
         contrib_api_version: 1,
         contributions: [],
         engine: { model: "test-model", active_scenes: ["coding"], status: {} },

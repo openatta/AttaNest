@@ -18,6 +18,8 @@
 //
 //   node tests/topology-parity.mjs <port> <token>
 
+import { PROTOCOL_VERSION, CONTRIB_API_VERSION } from "../ui/runtime/protocol.js";
+
 const [port, token] = process.argv.slice(2);
 if (!port || !token) {
   console.error("usage: node tests/topology-parity.mjs <port> <token>");
@@ -53,7 +55,7 @@ async function singleDuplex() {
     pending.set(i, { res, rej });
     ws.send(JSON.stringify({ jsonrpc: "2.0", method, params: params || {}, id: i }));
   });
-  await call("nest.handshake", { protocol_version: 3, contrib_api_version: 1, topology: "single_duplex" });
+  await call("nest.handshake", { protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "single_duplex" });
   return { name: "single_duplex", call, events, close: () => ws.close() };
 }
 
@@ -64,7 +66,7 @@ async function splitStreams() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      token, protocol_version: 3, contrib_api_version: 1, topology: "split_streams",
+      token, protocol_version: PROTOCOL_VERSION, contrib_api_version: CONTRIB_API_VERSION, topology: "split_streams",
     }),
   }).then((r) => r.json());
   if (handshake.error) throw handshake.error;
