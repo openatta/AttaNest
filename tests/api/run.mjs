@@ -23,7 +23,13 @@ const option = (name, fallback) => {
   const at = argv.indexOf(`--${name}`);
   return at === -1 ? fallback : argv[at + 1];
 };
-const named = argv.filter((a) => !a.startsWith("--") && argv[argv.indexOf(a) - 1] !== "--topology");
+// Suite names are the bare arguments. Anything sitting directly after a
+// `--flag` is that flag's value, not a suite — `--port 4400` used to leave
+// `4400` here, which matched no suite, filtered every one of them out, and
+// reported "0 passed, 0 failed" as a success. A run that selects nothing is
+// not a run that found nothing wrong.
+const OPTIONS = new Set(["--topology", "--port", "--suite"]);
+const named = argv.filter((a, i) => !a.startsWith("--") && !OPTIONS.has(argv[i - 1]));
 
 const topology = option("topology", "single_duplex");
 const env = loadEnv();
@@ -71,6 +77,13 @@ writeFileSync(profile, [
 ].join("\n"));
 
 const fixtures = join(here, "fixtures", "recordings");
+if (!suites.length) {
+  console.error(named.length
+    ? `no suite matches ${named.join(", ")}`
+    : "no suites found");
+  process.exit(2);
+}
+
 const backend = await startBackend({
   port: Number(option("port", 4270)),
   env: model ? env : { ANTHROPIC_API_KEY: "api-tests-no-model" },

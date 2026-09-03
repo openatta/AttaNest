@@ -206,8 +206,26 @@ the two disagree. *Both written in Chinese.*
 
 ## Tests
 
+Every layer, in order, cheapest first, with anything that could not run said
+out loud rather than dropped:
+
 ```sh
-cargo clippy --workspace
+scripts/check.sh              # everything this machine can run
+scripts/check.sh --fast       # skip the model and the browser
+scripts/check.sh --only api   # one layer
+scripts/check.sh --with-remote  # also pairing over TLS — opens a listener on this network
+```
+
+`.github/workflows/check.yml` runs the layers that need neither a model nor a
+reachable network, which is most of them.
+
+Or by hand:
+
+```sh
+# `--no-deps` so the submodule's lints are not this repository's to answer for.
+cargo clippy -p nest -p nest-hub -p nest-transport -p nest-authz \
+             -p nest-assembly -p nest-contrib -p nest-builtin -p nest-contract \
+             --all-targets --no-deps -- -D warnings
 # Ours only. AttaCore's own tests assume it is its own workspace root.
 cargo test -p nest -p nest-hub -p nest-transport -p nest-authz \
            -p nest-assembly -p nest-contrib \

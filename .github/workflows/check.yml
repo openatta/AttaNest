@@ -1,0 +1,88 @@
+# The layers that need nothing this runner cannot have.
+#
+# No model, no `.env`, no reachable network: so no `--live`, no interface
+# smokes, and no `remote-smoke`. Those three are the ones `scripts/check.sh`
+# reports as skipped on a machine without them, and the same honesty applies
+# here — a green tick on this workflow means the deterministic layers passed,
+# not that everything did.
+#
+# What is covered: the dependency-graph assertions, every unit test, clippy at
+# zero warnings on Nest's own crates, the offline interface checks, the whole
+# API surface over both topologies against recorded fixtures, the browser
+# layer, and a package installed end to end on the shipped binary.
+
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # AttaCore is a submodule and the whole product is assembled from
+          # it — without this there is nothing to build.
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the shipped binary
+        run: cargo build --release -p nest
+
+      - name: Unit tests and layering assertions
+        run: |
+          cargo test -p nest -p nest-assembly -p nest-authz -p nest-builtin \
+                     -p nest-contract -p nest-contrib -p nest-hub -p nest-transport
+
+      # `--no-deps` so the AttaCore submodule's own lints are not this
+      # repository's to answer for.
+      - name: Clippy, zero warnings on Nest's crates
+        run: |
+          cargo clippy -p nest -p nest-assembly -p nest-authz -p nest-builtin \
+                       -p nest-contract -p nest-contrib -p nest-hub -p nest-transport \
+                       --all-targets --no-deps -- -D warnings
+
+      - name: Interface checks that need no backend
+        run: |
+          node tests/style-lint.mjs
+          node tests/contrib-smoke.mjs
+          node tests/reducer-smoke.mjs
+          node tests/i18n-smoke.mjs
+          node tests/readme-pairing.mjs
+
+      - name: The API, both topologies, against recorded fixtures
+        run: |
+          node tests/api/run.mjs --topology single_duplex
+          node tests/api/run.mjs --topology split_streams
+
+      - name: Install chromium
+        run: npm install && npx playwright install --with-deps chromium
+
+      - name: The browser layer
+        run: npx playwright test
+
+      - name: A package, from zip to a row on screen
+        run: node tests/package-e2e.mjs
+
+      # Latency and memory, measured last and alone — a shared runner makes
+      # the numbers noisy, so this reports rather than gates.
+      - name: Budget
+        run: node tests/budget.mjs
+        continue-on-error: true

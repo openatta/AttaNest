@@ -12,6 +12,19 @@ node tests/api/run.mjs --live                    # against a real model
 node tests/api/run.mjs --no-model                # neither; model-shaped suites skip
 ```
 
+No flag is the mode to use. `--no-model` is a third thing — neither a provider
+nor a fixture — under which four suites skip themselves; it exists for a
+machine with no recordings, and a run that used it by mistake looked like the
+deterministic one while covering a good deal less.
+
+Or all of it, every layer, in one command:
+
+```sh
+scripts/check.sh              # everything this machine can run
+scripts/check.sh --fast       # skip the model and the browser
+scripts/check.sh --only api   # one layer
+```
+
 ## Turns are replayed, not called
 
 By default every model call comes from a **recorded fixture**
@@ -35,7 +48,7 @@ replaying session does not do.
 
 ```
 56/56 reachable methods called (100%)
-21/56 also driven into an error (38%)
+25/56 also driven into an error (45%)
 9 distinct error codes seen: -31000 (config.setProvider), …
 ```
 

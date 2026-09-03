@@ -183,8 +183,24 @@ core/             AttaCore（submodule）
 
 ## 测试
 
+每一层，按从便宜到贵的顺序跑一遍；跑不了的会明说，而不是悄悄跳过：
+
 ```sh
-cargo clippy --workspace
+scripts/check.sh              # 这台机器能跑的全部
+scripts/check.sh --fast       # 不要模型和浏览器那两层
+scripts/check.sh --only api   # 只跑一层
+scripts/check.sh --with-remote  # 加上配对与 TLS —— 会在本机网络上开一个监听
+```
+
+`.github/workflows/check.yml` 跑的是既不需要模型、也不需要可达网络的那些层，也就是大部分。
+
+或者手动来：
+
+```sh
+# `--no-deps`：子模块自己的 lint 不该由这个仓库来答。
+cargo clippy -p nest -p nest-hub -p nest-transport -p nest-authz \
+             -p nest-assembly -p nest-contrib -p nest-builtin -p nest-contract \
+             --all-targets --no-deps -- -D warnings
 # 只跑我们的。被吸收进来的 AttaCore crate 里有测试假定 Core 自己是 workspace 根。
 cargo test -p nest -p nest-hub -p nest-transport -p nest-authz \
            -p nest-assembly -p nest-contrib \
