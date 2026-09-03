@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 # `script-host` (the QuickJS carrier, on by default — see the `daemon` entry
 # below) needs 1.87. The floor is the whole graph's, so it is declared here
