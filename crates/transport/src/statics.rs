@@ -1,14 +1,17 @@
-//! The static face, when this node serves one.
+//! The static face: the interface itself, and the modules installed packages
+//! contribute to it.
 //!
-//! The interface is a **separate artifact** — ES modules, CSS and an asset
-//! manifest — and the backend is one binary that does not contain it (§5.1).
-//! Three deployments share one transport contract: served from here, served
-//! by any static server or CDN, or not served at all (`--headless`).
+//! **The interface ships inside the binary.** One artifact to install, and no
+//! way to end up running a page and a backend that disagree — they are
+//! compiled together. `--ui-dir` replaces it with a directory on disk, which
+//! is how a different interface becomes a flag instead of a rebuild (§5.1),
+//! and how the front end is worked on: edit, reload, no recompile.
+//! `--headless` serves neither.
 //!
-//! The cost of that separation is two release artifacts and one explicit
-//! version negotiation; the reason is customization, which is the first goal.
-//! A whole different interface makes a different product without recompiling
-//! the backend.
+//! A package's modules are **never** embedded, and could not be: a package is
+//! installed while the process runs, so its files exist only on disk. That is
+//! why the two are separate branches here rather than one lookup with a
+//! fallback — they answer from different places for different reasons.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -17,62 +20,113 @@ use std::sync::RwLock;
 use axum::extract::State;
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use include_dir::{include_dir, Dir};
 
 use crate::AppState;
 
+/// The interface, as built. Compiled in from `ui/`.
+static INTERFACE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../ui");
+
 /// No external sources and no inline anything.
+///
+/// A package's interface module is a same-origin module, so this does not
+/// have to be loosened for one to load — and it must not be: going out is a
+/// capability to declare and have disclosed, not one to get by running in a
+/// browser. `'self'` is about the **origin**, not about where the bytes were
+/// stored, so embedding the interface changes nothing here: a page served
+/// from the binary and a module served from the plugin cache come from the
+/// same host and port.
 ///
 /// There is no inline script or style anywhere in the page, so neither
 /// `'unsafe-inline'` nor a list of hashes is needed; the token travels in a
-/// `<meta>` tag. Nothing is fetched from the network at run time, which is
-/// what lets the interface open with no network at all.
+/// `<meta>` tag.
 pub const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; \
      connect-src 'self'; img-src 'self' data:; font-src 'self' data:; \
      base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+/// Where the interface comes from.
+#[derive(Debug, Clone)]
+pub enum Face {
+    /// The one compiled in. The default, and the only one that cannot be
+    /// out of step with this binary.
+    Embedded,
+    /// A directory on disk, replacing it whole.
+    Directory(PathBuf),
+    /// None at all — a pure RPC node.
+    Headless,
+}
+
 pub struct StaticFace {
-    root: Option<PathBuf>,
+    face: Face,
     /// Each installed package's directory, by name.
     ///
-    /// Served from a **same-origin** path, which is the whole reason the
-    /// browser can `import()` one at run time: the CSP is `script-src 'self'`
-    /// and is not loosened for a package. A bundle has to be self-contained —
-    /// no CDN, nothing fetched from the network — and that is also what lets
-    /// the interface open with no network at all.
-    ///
-    /// Resolved through this map rather than by joining a path, so a request
-    /// can only reach a directory the engine actually installed.
+    /// Served from a **same-origin** path, which is what makes a runtime
+    /// `import()` possible. Resolved through this map rather than by joining
+    /// a path, so a request can only reach a directory the engine actually
+    /// installed.
     packages: RwLock<BTreeMap<String, PathBuf>>,
 }
 
 impl StaticFace {
-    pub fn new(root: Option<PathBuf>) -> Self {
-        Self { root, packages: RwLock::new(BTreeMap::new()) }
+    pub fn new(face: Face) -> Self {
+        Self { face, packages: RwLock::new(BTreeMap::new()) }
     }
 
-    /// Replace what is being served. Called once at assembly and again after
-    /// an install, because a package that needs a restart to appear is a
+    /// Replace what is being served. Called at assembly and again after an
+    /// install, because a package that needed a restart to appear is a
     /// package nobody will believe installed.
     pub fn set_packages(&self, packages: BTreeMap<String, PathBuf>) {
         *self.packages.write().unwrap() = packages;
     }
 
     pub fn serves_anything(&self) -> bool {
-        self.root.is_some()
+        !matches!(self.face, Face::Headless)
     }
 
-    /// Resolve a request path under the interface directory.
+    /// Write the embedded interface out.
+    ///
+    /// For the deployment where something else serves it — a CDN, or a proxy
+    /// with its own static root. One installed artifact still, and the files
+    /// when they are wanted, rather than a second thing to download and keep
+    /// in step.
+    pub fn export(to: &Path) -> std::io::Result<usize> {
+        fn write(dir: &Dir<'_>, to: &Path, count: &mut usize) -> std::io::Result<()> {
+            for file in dir.files() {
+                let path = to.join(file.path());
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&path, file.contents())?;
+                *count += 1;
+            }
+            for sub in dir.dirs() {
+                write(sub, to, count)?;
+            }
+            Ok(())
+        }
+        let mut count = 0;
+        std::fs::create_dir_all(to)?;
+        write(&INTERFACE, to, &mut count)?;
+        Ok(count)
+    }
+
+    /// Resolve a request path.
     ///
     /// Anything containing `..` falls back to the index rather than being
     /// resolved: a deep link that reloads must not land on an error page, and
     /// a traversal must not land anywhere at all.
     fn read(&self, path: &str) -> Option<(Vec<u8>, &'static str)> {
-        let root = self.root.as_ref()?;
+        if matches!(self.face, Face::Headless) {
+            return None;
+        }
         let clean = path.trim_start_matches('/');
         if clean.is_empty() || clean.contains("..") {
-            return read_file(&root.join("index.html")).map(|b| (b, "text/html; charset=utf-8"));
+            return self.interface("index.html").map(|b| (b, "text/html; charset=utf-8"));
         }
-        // `/plugins/<name>/ui/<file>`.
+
+        // `/plugins/<name>/ui/<file>` — always from disk. A package is
+        // installed while this process runs, so its files were never here to
+        // embed.
         if let Some(rest) = clean.strip_prefix("plugins/") {
             let (name, file) = rest.split_once("/ui/")?;
             if file.contains("..") || name.contains('/') {
@@ -81,10 +135,20 @@ impl StaticFace {
             let dir = self.packages.read().unwrap().get(name).cloned()?;
             return read_file(&dir.join("ui").join(file)).map(|b| (b, content_type(file)));
         }
-        match read_file(&root.join(clean)) {
+
+        match self.interface(clean) {
             Some(bytes) => Some((bytes, content_type(clean))),
             // Client-side routing: an unknown path is a route, not a 404.
-            None => read_file(&root.join("index.html")).map(|b| (b, "text/html; charset=utf-8")),
+            None => self.interface("index.html").map(|b| (b, "text/html; charset=utf-8")),
+        }
+    }
+
+    /// One interface file, from wherever this deployment's interface lives.
+    fn interface(&self, path: &str) -> Option<Vec<u8>> {
+        match &self.face {
+            Face::Embedded => INTERFACE.get_file(path).map(|f| f.contents().to_vec()),
+            Face::Directory(root) => read_file(&root.join(path)),
+            Face::Headless => None,
         }
     }
 }

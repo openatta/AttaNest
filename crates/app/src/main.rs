@@ -28,9 +28,33 @@ mod methods;
 mod paths;
 use paths::{RootArgs, Roots};
 
+#[derive(clap::Subcommand, Debug)]
+enum Command {
+    /// Work with the interface this binary carries.
+    #[command(subcommand)]
+    Ui(UiCommand),
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum UiCommand {
+    /// Write the interface out, for something else to serve.
+    ///
+    /// For the deployment where a CDN or a proxy has its own static root.
+    /// The binary still carries it, so there is one artifact to install and
+    /// the files are available when they are wanted — rather than a second
+    /// download to keep in step with this one.
+    Export {
+        /// Where to write it.
+        dir: PathBuf,
+    },
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about = "AttaCore, assembled into a product")]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// A profile: which scenes, which providers, which plugins, which
     /// interface, which transport topology. Flags below override what it says.
     #[arg(long)]
@@ -58,12 +82,13 @@ struct Cli {
     #[arg(long)]
     model: Option<String>,
 
-    /// The built interface. Omit for `--headless`: a pure RPC node, with the
-    /// interface somewhere else or nowhere.
+    /// Serve the interface from this directory instead of the one compiled
+    /// in. For working on the front end, and for running a different
+    /// interface without rebuilding the backend.
     #[arg(long)]
     ui_dir: Option<PathBuf>,
 
-    /// Serve no static face at all.
+    /// Serve no interface at all — a pure RPC node.
     #[arg(long)]
     headless: bool,
 
@@ -106,6 +131,11 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+    if let Some(Command::Ui(UiCommand::Export { dir })) = &cli.command {
+        let count = nest_transport::StaticFace::export(dir)?;
+        println!("\n  {count} files → {}\n", dir.display());
+        return Ok(());
+    }
     let profile = resolve_profile(&cli)?;
 
     let host: IpAddr = profile.transport.host.parse()?;
@@ -217,10 +247,19 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!(error = %e, "could not write the token file");
     }
 
-    let ui_dir = if cli.headless { None } else { profile.ui.dir.clone() };
-    match &ui_dir {
-        Some(dir) => tracing::info!(dir = %dir.display(), "serving the interface"),
-        None => tracing::info!("headless: no static face, RPC only"),
+    // Which interface, said once and logged, because "I edited a file and
+    // nothing changed" is the failure this choice produces when it is silent.
+    let face = match (cli.headless, profile.ui.dir.clone()) {
+        (true, _) => nest_transport::Face::Headless,
+        (false, Some(dir)) => nest_transport::Face::Directory(dir),
+        (false, None) => nest_transport::Face::Embedded,
+    };
+    match &face {
+        nest_transport::Face::Embedded => tracing::info!("serving the interface compiled in"),
+        nest_transport::Face::Directory(dir) => {
+            tracing::info!(dir = %dir.display(), "serving the interface from disk, not the one compiled in")
+        }
+        nest_transport::Face::Headless => tracing::info!("headless: no interface, RPC only"),
     }
 
     let (router, statics) = nest_transport::router(
@@ -231,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
         nest_transport::Config {
             topologies: profile.transport.topologies.clone(),
             token: token.clone(),
-            ui_dir,
+            face: face.clone(),
             tls: tls.clone(),
             // Decided by where this listens, not by a setting. A reachable
             // listener needs a paired device; loopback does not have one to

@@ -26,7 +26,7 @@ mod statics;
 mod ws;
 
 pub use bulk::BulkStore;
-pub use statics::{StaticFace, CSP};
+pub use statics::{Face, StaticFace, CSP};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -48,8 +48,9 @@ pub struct Config {
     /// not us — a page cannot forge that header — and this refuses everything
     /// else.
     pub token: String,
-    /// Where the built interface is, if this node serves one at all.
-    pub ui_dir: Option<std::path::PathBuf>,
+    /// Where the interface comes from: the one compiled in, a directory that
+    /// replaces it, or none at all.
+    pub face: statics::Face,
     /// TLS material. Required for any non-loopback bind — see [`serve`].
     pub tls: Option<Tls>,
     /// How a connection proves it may be here.
@@ -108,7 +109,7 @@ pub fn router(
     devices: Arc<nest_authz::Devices>,
     config: Config,
 ) -> (Router, Arc<StaticFace>) {
-    let statics = Arc::new(StaticFace::new(config.ui_dir.clone()));
+    let statics = Arc::new(StaticFace::new(config.face.clone()));
     let topologies = config.topologies.clone();
     let state = AppState {
         gate,

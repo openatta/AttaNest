@@ -34,12 +34,14 @@ const BUDGET = [
     measure: () => statSync(join(root, "target", "release", "nest")).size,
   },
   {
-    name: "interface bundle (gzipped)",
+    name: "interface (gzipped, as embedded)",
     limit: 300 * KB,
     unit: (n) => `${(n / KB).toFixed(0)} KB`,
-    // A separate artifact, so it has its own number. It is self-contained —
-    // no CDN, nothing fetched at run time — which is what lets the interface
-    // open with no network at all.
+    // Measured from `ui/`, which is what `include_dir!` compiles in — the
+    // same bytes, so this is the embedded size and not an estimate of it.
+    // It is self-contained (no CDN, nothing fetched at run time), which is
+    // what lets the interface open with no network at all, and it is also
+    // why it can live in the binary without dragging anything else along.
     measure: () => {
       let total = 0;
       const walk = (dir) => {

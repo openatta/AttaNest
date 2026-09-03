@@ -13,6 +13,7 @@ nest-authz    = { workspace = true }
 nest-hub      = { workspace = true }
 async-trait   = { workspace = true }
 axum        = { workspace = true }
+include_dir = { workspace = true }
 axum-server = { workspace = true }
 rustls      = { workspace = true }
 tokio       = { workspace = true }

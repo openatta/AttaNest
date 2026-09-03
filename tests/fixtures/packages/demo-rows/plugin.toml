@@ -12,3 +12,8 @@ description = "Replaces the tool row for Bash, and nothing else."
 [[ui]]
 point = "tool.row"
 module = "rows.js"
+# The contribution API this module is written against — not the same number
+# as `[plugin] api_version`, which is the engine's. A package can be current
+# on one and stale on the other, so there are two and each side checks its
+# own.
+api_version = 1

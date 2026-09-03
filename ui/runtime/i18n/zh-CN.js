@@ -346,4 +346,5 @@ export default {
   "settings.pluginsUnavailable": "这个构建不带插件子系统",
   "settings.pluginContributes": "贡献",
   "settings.pluginInert": "不会生效",
+  "settings.pluginNote": "提示",
 };

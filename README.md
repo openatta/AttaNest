@@ -48,10 +48,13 @@ says so.
   the complete tool catalog and the call configuration, with each block and each tool naming the
   stage that produced it (`identity`, `skills`, `memory`, `mcp:<server>`, `plugin:<id>`). See below.
 
-- **The interface is a separate artifact, assembled out of six named seams.** The tool rows,
-  the panels, the sidebar groups are registrations, not a switch statement — so a different product
-  is a different set of registrations, not a fork. Point `--ui-dir` somewhere else and nothing is
-  recompiled; `--headless` serves no interface at all.
+- **One file to install, and the interface is still replaceable.** It is compiled in, so a page
+  and a backend cannot be out of step. `--ui-dir` replaces it whole without recompiling anything,
+  `--headless` serves none, and `nest ui export` writes it out for a CDN to serve.
+
+- **The interface is assembled out of six named seams.** The tool rows, the panels, the sidebar
+  groups are registrations, not a switch statement — so a different product is a different set of
+  registrations, not a fork, and an installed package registers through the same ones.
 
 - **No build step for the frontend.** Plain ES modules and CSS. `nest --ui-dir ./ui` serves them
   from disk: edit, reload, done.
@@ -122,7 +125,8 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 | `--model` / `--max-tokens` | For new sessions. The three settings tiers still outrank them, as in `attacored` |
 | `--session-cap` / `--session-idle-timeout` | Ceiling on live sessions, and idle reclamation |
 | `--permission-prompt-timeout` | How long an unanswered permission prompt waits before counting as a refusal (default 300s; the UI counts down) |
-| `--ui-dir` | Where the built interface is. Omit it, or pass `--headless`, for an RPC-only node |
+| `--ui-dir` | Serve the interface from a directory instead of the one compiled in |
+| `--headless` | Serve no interface at all — an RPC-only node |
 | `--profile` | A profile: scenes, providers, interface, transport topology. Flags override it |
 
 </details>
@@ -183,7 +187,7 @@ crates/contrib    the interface's seams: the generated catalog and the registry
 crates/builtin    Nest's own methods and interface parts, through that registry
 crates/contract   the types those layers hand each other, and nothing else
 
-ui/               the interface, a separate artifact: runtime/, builtin/, shell/, styles/
+ui/               the interface, compiled into the binary: runtime/, builtin/, shell/, styles/
 core/             AttaCore (submodule)
 ```
 

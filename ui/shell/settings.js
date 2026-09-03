@@ -367,6 +367,11 @@ function renderPlugins(page) {
         for (const reason of contributes?.inert ?? []) {
           host.appendChild(row(t("settings.pluginInert"), el("span", "value", ""), reason));
         }
+        // Separate line, because "will not appear" and "works, but worth
+        // knowing" are different things to be told.
+        for (const note of contributes?.notes ?? []) {
+          host.appendChild(row(t("settings.pluginNote"), el("span", "value", ""), note));
+        }
       }
     });
 }

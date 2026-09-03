@@ -347,4 +347,5 @@ export default {
   "settings.pluginsUnavailable": "this build carries no plugin subsystem",
   "settings.pluginContributes": "Contributes",
   "settings.pluginInert": "Will not take",
+  "settings.pluginNote": "Note",
 };

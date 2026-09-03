@@ -44,9 +44,12 @@ key 即可 —— 它写进 `settings.json`，不进浏览器也不进日志。�
   而且每一块、每一个工具都说得出自己出自哪个装配阶段（`identity`、`skills`、`memory`、
   `mcp:<server>`、`plugin:<id>`）。见下。
 
-- **界面是独立产物，由六个具名接缝拼起来。** 工具行、详情面板、侧栏分组都是注册，不是 switch
-  分支——换一个产品是换一批注册，不是 fork。`--ui-dir` 指到别处什么都不用重编译；
-  `--headless` 则一张界面都不提供。
+- **安装物是一个文件，界面照样能换。** 界面编译在里面，所以页面和后端不可能对不上。
+  `--ui-dir` 整套替换掉它，什么都不用重编译；`--headless` 一张都不发；`nest ui export`
+  把它写出来交给 CDN。
+
+- **界面由六个具名接缝拼起来。** 工具行、详情面板、侧栏分组都是注册，不是 switch 分支——
+  换一个产品是换一批注册，不是 fork，装上的包也走同样这几个点。
 
 - **前端没有构建步骤。** 原生 ES 模块加 CSS，`nest --ui-dir ./ui` 从磁盘读：改完刷新就行。
 
@@ -111,7 +114,8 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 | `--model` / `--max-tokens` | 给新会话用。settings 三层仍然优先于它，与 `attacored` 一致 |
 | `--session-cap` / `--session-idle-timeout` | 活跃会话上限与空闲回收 |
 | `--permission-prompt-timeout` | 权限提问多久没人答就按拒绝处理（默认 300 秒，UI 上是倒计时） |
-| `--ui-dir` | 界面产物在哪。不给它、或给 `--headless`，就是一个纯 RPC 节点 |
+| `--ui-dir` | 从这个目录发界面，替换掉编译进去的那份 |
+| `--headless` | 一张界面都不发 —— 纯 RPC 节点 |
 | `--profile` | 一份 profile：场景、provider、界面、传输拓扑。命令行参数覆盖它 |
 
 </details>
@@ -163,7 +167,7 @@ crates/contrib    界面的接缝：由代码生成的目录，与注册表
 crates/builtin    Nest 自己的方法与界面部件，走的就是那个注册表
 crates/contract   上面这些层互相递交的类型，仅此而已
 
-ui/               界面，独立产物：runtime/、builtin/、shell/、styles/
+ui/               界面，编译进二进制：runtime/、builtin/、shell/、styles/
 core/             AttaCore（submodule）
 ```
 

@@ -39,6 +39,7 @@
 
 use std::path::{Path, PathBuf};
 
+use nest_contrib::CONTRIB_API_VERSION;
 use serde::{Deserialize, Serialize};
 
 /// What a package contributes to this side.
@@ -49,15 +50,34 @@ pub struct Contributions {
     pub root: PathBuf,
     pub enabled: bool,
     pub ui: Vec<UiEntry>,
-    /// Declared sections that will not take, and why. Kept rather than
+    /// Declared sections that will **not** take, and why. Kept rather than
     /// dropped: a contribution that quietly does nothing is the failure mode
     /// worth designing against.
     pub inert: Vec<String>,
+    /// Things that will take, and are still worth saying.
+    ///
+    /// Separate from `inert` because they answer different questions. "This
+    /// will not appear" and "this works but is built on an assumption that
+    /// may not hold next release" belong on different lines, and folding the
+    /// second into the first would make every advisory look like a failure.
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiEntry {
     pub point: String,
+    /// Which contribution API this module was written against.
+    ///
+    /// Not the same number as `[plugin] api_version`, which is the engine's.
+    /// A package can be current on one and stale on the other, so they are
+    /// two versions and are checked by the two sides that own them.
+    ///
+    /// Absent means "written before this was declared". Accepted, because
+    /// refusing every package that predates the field would be a version
+    /// check that mostly rejects working things — but reported, so an author
+    /// is told rather than left to find out when a panel does not appear.
+    #[serde(default)]
+    pub api_version: Option<u32>,
     /// Relative to the package's `ui/` directory, and only ever resolved
     /// against it. That is not a convention — it is what makes it impossible
     /// to name a file outside `ui/`, so nothing else in the package can be
@@ -89,10 +109,34 @@ pub fn read(root: &Path, name: &str, version: &str, enabled: bool) -> Option<Con
     }
 
     let mut inert = Vec::new();
+    let mut notes = Vec::new();
     let ui: Vec<UiEntry> = sections
         .ui
         .into_iter()
         .filter(|entry| {
+            // A module written against a different contribution API is
+            // refused **here**, at install, rather than imported and left to
+            // fail inside `activate()`. The second way produces a panel that
+            // silently does not appear, which is the failure mode with no
+            // symptom (§2.4).
+            match entry.api_version {
+                Some(declared) if declared != CONTRIB_API_VERSION => {
+                    inert.push(format!(
+                        "{} 是照贡献点 API v{declared} 写的，这个构建是 v{CONTRIB_API_VERSION}；\
+                         {} 的那一边旧了",
+                        entry.point,
+                        if declared < CONTRIB_API_VERSION { "包" } else { "Nest" },
+                    ));
+                    return false;
+                }
+                // Loads. Said anyway, because the alternative is an author
+                // finding out when a panel stops appearing.
+                None => notes.push(format!(
+                    "{} 没有声明 api_version；贡献点契约改动之后它会安静地失效",
+                    entry.point,
+                )),
+                _ => {}
+            }
             // A module has to be inside the package. Anything with `..` in it
             // is refused here rather than resolved — the unpacker already
             // rejects such entries, and this is the second place that would
@@ -113,6 +157,7 @@ pub fn read(root: &Path, name: &str, version: &str, enabled: bool) -> Option<Con
         enabled,
         ui,
         inert,
+        notes,
     })
 }
 
@@ -145,6 +190,9 @@ pub async fn discover(hub: &nest_hub::Hub, plugins_dir: &Path) -> Vec<Contributi
         if let Some(contributions) = read(&root, &name, &version, enabled) {
             for reason in &contributions.inert {
                 tracing::warn!(plugin = %name, %reason, "a declared contribution will not take");
+            }
+            for note in &contributions.notes {
+                tracing::info!(plugin = %name, %note, "about a contribution");
             }
             found.push(contributions);
         }
@@ -238,6 +286,74 @@ mod tests {
 
     /// `module` is resolved under `ui/` and nowhere else, so a package
     /// cannot name a file elsewhere in itself and have it served over HTTP.
+    /// A module written against a different contribution API is refused at
+    /// install, with which side is stale named.
+    #[test]
+    fn a_mismatched_contribution_api_is_refused_by_version() {
+        let dir = package(&format!(
+            r#"
+            [plugin]
+            name = "p"
+            version = "1.0.0"
+            api_version = "1"
+
+            [[ui]]
+            point = "tool.row"
+            module = "rows.js"
+            api_version = {}
+            "#,
+            CONTRIB_API_VERSION + 1,
+        ));
+        let read = read(dir.path(), "p", "1.0.0", true).expect("declares something");
+        assert!(read.ui.is_empty(), "a mismatched module was going to be loaded");
+        assert!(read.inert[0].contains("Nest"), "does not say which side is stale");
+    }
+
+    #[test]
+    fn a_matching_contribution_api_loads_without_comment() {
+        let dir = package(&format!(
+            r#"
+            [plugin]
+            name = "p"
+            version = "1.0.0"
+            api_version = "1"
+
+            [[ui]]
+            point = "tool.row"
+            module = "rows.js"
+            api_version = {CONTRIB_API_VERSION}
+            "#
+        ));
+        let read = read(dir.path(), "p", "1.0.0", true).expect("contributes");
+        assert_eq!(read.ui.len(), 1);
+        assert!(read.inert.is_empty(), "a matching version was refused: {:?}", read.inert);
+        assert!(read.notes.is_empty(), "a matching version was commented on: {:?}", read.notes);
+    }
+
+    /// A package that predates the field still loads. Refusing every one of
+    /// them would be a version check that mostly rejects working things —
+    /// but the author is told, rather than finding out when a panel does not
+    /// appear.
+    #[test]
+    fn an_undeclared_contribution_api_loads_and_is_mentioned() {
+        let dir = package(
+            r#"
+            [plugin]
+            name = "p"
+            version = "1.0.0"
+            api_version = "1"
+
+            [[ui]]
+            point = "tool.row"
+            module = "rows.js"
+            "#,
+        );
+        let read = read(dir.path(), "p", "1.0.0", true).expect("contributes");
+        assert_eq!(read.ui.len(), 1, "an undeclared version was refused");
+        assert!(read.inert.is_empty(), "an advisory was filed as a refusal");
+        assert!(read.notes[0].contains("api_version"), "the author was not told");
+    }
+
     #[test]
     fn a_module_cannot_reach_outside_the_ui_directory() {
         let dir = package(
