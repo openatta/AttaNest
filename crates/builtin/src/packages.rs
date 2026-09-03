@@ -28,14 +28,12 @@
 //! **Nest executes nothing a package brought.** That version needs no
 //! exception, and `crates/app/tests/layering.rs` holds it.
 //!
-//! # The one coupling here, named
+//! # Where the package is, is the engine's to say
 //!
-//! `plugin.list` answers with names and versions and no paths, so the
-//! unpacked directory has to be derived from the engine's cache layout:
-//! `<plugins-dir>/cache/{name}/{version}/`. That is a dependency on a layout
-//! rather than on an interface, and it is written down here rather than
-//! spread across call sites — a `root` on `plugin.list` would remove it
-//! (see the request filed against AttaCore).
+//! `plugin.list` carries each package's unpacked `root`. Nest reads it and
+//! never composes a path of its own, so the engine's cache layout stays the
+//! engine's: it can move packages, version the directory name, or split the
+//! tiers differently, and nothing here has to be told.
 
 use std::path::{Path, PathBuf};
 
@@ -90,11 +88,6 @@ pub struct UiEntry {
 struct Sections {
     #[serde(default)]
     ui: Vec<UiEntry>,
-}
-
-/// Where the engine unpacks a package.
-pub fn package_root(plugins_dir: &Path, name: &str, version: &str) -> PathBuf {
-    plugins_dir.join("cache").join(name).join(version)
 }
 
 /// Read one package's `[[ui]]` section.
@@ -161,33 +154,21 @@ pub fn read(root: &Path, name: &str, version: &str, enabled: bool) -> Option<Con
     })
 }
 
-/// Everything installed that contributes to this side.
+/// Everything that contributes to this side, in a `plugin.list` answer.
 ///
-/// Driven by what the engine says is installed, so a package that the engine
-/// refused, disabled or never had is not here either. Asking the engine
-/// rather than scanning the directory is the difference between "installed"
-/// and "some files are lying around".
-pub async fn discover(hub: &nest_hub::Hub, plugins_dir: &Path) -> Vec<Contributions> {
-    let listed = match hub.engine_call("plugin.list", serde_json::json!({})).await {
-        Ok(value) => value,
-        Err(e) => {
-            // In a build carrying the script carrier this is
-            // `PLUGINS_DISABLED` and nothing is installed, which is a fact
-            // rather than a failure — see §4.5.
-            tracing::debug!(reason = %e.message, "no installed packages to read");
-            return Vec::new();
-        }
-    };
+/// Separate from [`discover`] so a caller that already asked the engine —
+/// `nest.plugins.list` does, to show the engine's own list beside this one —
+/// reads the answer it has rather than asking a second time.
+pub fn read_all(listed: &serde_json::Value) -> Vec<Contributions> {
     let mut found = Vec::new();
-    for entry in listed.get("plugins").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
-        let get = |key: &str| entry.get(key).and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let (name, version) = (get("name"), get("version"));
-        if name.is_empty() || version.is_empty() {
+    for entry in listed.get("plugins").and_then(|v| v.as_array()).map_or(&[][..], |v| v) {
+        let get = |key: &str| entry.get(key).and_then(|v| v.as_str()).unwrap_or_default();
+        let (name, version, root) = (get("name"), get("version"), get("root"));
+        if name.is_empty() || version.is_empty() || root.is_empty() {
             continue;
         }
         let enabled = entry.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-        let root = package_root(plugins_dir, &name, &version);
-        if let Some(contributions) = read(&root, &name, &version, enabled) {
+        if let Some(contributions) = read(Path::new(root), name, version, enabled) {
             for reason in &contributions.inert {
                 tracing::warn!(plugin = %name, %reason, "a declared contribution will not take");
             }
@@ -198,6 +179,25 @@ pub async fn discover(hub: &nest_hub::Hub, plugins_dir: &Path) -> Vec<Contributi
         }
     }
     found
+}
+
+/// Ask the engine what is installed, and read what of it lands here.
+///
+/// Driven by what the engine says is installed, so a package that the engine
+/// refused, disabled or never had is not here either. Asking the engine
+/// rather than scanning the directory is the difference between "installed"
+/// and "some files are lying around".
+pub async fn discover(hub: &nest_hub::Hub) -> Vec<Contributions> {
+    match hub.engine_call("plugin.list", serde_json::json!({})).await {
+        Ok(listed) => read_all(&listed),
+        Err(e) => {
+            // A build without the package layer answers `PLUGINS_DISABLED`
+            // and nothing is installed, which is a fact rather than a
+            // failure — see §4.5.
+            tracing::debug!(reason = %e.message, "no installed packages to read");
+            Vec::new()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -352,6 +352,36 @@ mod tests {
         assert_eq!(read.ui.len(), 1, "an undeclared version was refused");
         assert!(read.inert.is_empty(), "an advisory was filed as a refusal");
         assert!(read.notes[0].contains("api_version"), "the author was not told");
+    }
+
+    /// The unpacked directory comes from the engine's answer. Nest composes
+    /// no path of its own, so a package the engine put somewhere unexpected
+    /// is still found, and one the engine did not locate is skipped rather
+    /// than guessed at.
+    #[test]
+    fn the_root_is_taken_from_the_engine_and_never_composed() {
+        let dir = package(
+            r#"
+            [plugin]
+            name = "p"
+            version = "1.0.0"
+            api_version = "1"
+
+            [[ui]]
+            point = "tool.row"
+            module = "rows.js"
+            api_version = 1
+            "#,
+        );
+        let listed = serde_json::json!({"plugins": [
+            {"name": "p", "version": "1.0.0", "enabled": true,
+             "root": dir.path().display().to_string()},
+            {"name": "no-root", "version": "1.0.0", "enabled": true},
+        ]});
+        let found = read_all(&listed);
+        assert_eq!(found.len(), 1, "a package without a root was guessed at");
+        assert_eq!(found[0].root, dir.path());
+        assert_eq!(found[0].ui.len(), 1);
     }
 
     #[test]

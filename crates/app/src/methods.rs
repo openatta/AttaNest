@@ -14,20 +14,16 @@ pub fn table() -> MethodTable {
         .allow_all(nest_hub::HUB_METHODS, Reach::Device)
         // Engine methods that pass through untouched.
         .allow_all(nest_hub::PASSTHROUGH, Reach::Device)
-        // Extension management is AttaCore's, and reaching it is this
-        // person's to do. In a build carrying the script carrier these
-        // answer `PLUGINS_DISABLED`, which is passed through as-is: "there
-        // is no plugin subsystem here" is a different fact from "nothing is
-        // installed".
-        .allow_all(
-            &["plugin.install", "plugin.uninstall", "plugin.enable", "plugin.disable", "plugin.reload"],
-            Reach::Device,
-        )
         // Interrupting, closing and deleting are intercepted by the hub but
         // are still the device's to ask for.
         .allow_all(&["session.interrupt", "session.close", "session.delete"], Reach::Device)
         // Nest's own methods, registered through the same registry the
-        // interface's parts use.
+        // interface's parts use. Extension management lives in here, as
+        // `nest.plugins.*`: reaching AttaCore's own `plugin.install` and
+        // friends is not opened, because changing what is installed changes
+        // what this host serves, and going around the host would leave a
+        // disabled package's interface module still being served with
+        // nothing to notice it.
         .allow_all(nest_builtin::METHODS, Reach::Device)
         // Pairing another device, and revoking one. This person's own
         // machines are this person's to manage.
@@ -83,8 +79,15 @@ mod tests {
     #[test]
     fn extension_management_is_reachable_but_mcp_is_not() {
         let reachable = table().reachable(&device());
-        for method in ["plugin.install", "plugin.uninstall", "plugin.enable", "plugin.disable"] {
+        for method in ["nest.plugins.install", "nest.plugins.uninstall",
+                       "nest.plugins.enable", "nest.plugins.disable"] {
             assert!(reachable.contains(&method), "{method} unreachable");
+        }
+        // The engine's own names are not, because reaching them would skip
+        // the re-read that keeps what is served in step with what is
+        // installed.
+        for method in ["plugin.install", "plugin.uninstall", "plugin.enable", "plugin.disable"] {
+            assert!(!reachable.contains(&method), "{method} reachable around the host");
         }
         // Configures a subprocess-spawning tool with no manifest, no
         // capability declaration and no disclosure at all — a different

@@ -6,6 +6,12 @@
 // reducer does not handle, a node that is never swapped in. Everything below
 // the DOM is real — WebSocket, hub, engine, model.
 //
+// The backend has to serve the `chat` scene, because that is the one this
+// drives — start it with `--scenes chat`. Checked below rather than assumed:
+// creating in an inactive scene is refused, and every assertion after the
+// create then fails for a reason that has nothing to do with what broke.
+//
+//   nest --scenes chat …
 //   node tests/ui-smoke.mjs <port> <token>
 
 import { loadApp } from "./dom.mjs";
@@ -45,6 +51,10 @@ const create = $("modal").querySelectorAll("button").find((b) => text(b) === T("
 if (!create || selects.length < 2) fail("new-session dialog is incomplete");
 else {
   selects[0].value = "chat";
+  if (selects[0].value !== "chat") {
+    console.log("SKIP: the backend offers no `chat` scene");
+    process.exit(0);
+  }
   if (selects[0].onchange) selects[0].onchange();
   const noProject = $("modal").querySelectorAll("button").find((b) => text(b) === T("dialog.noProjectSession"));
   if (noProject) noProject.click();
@@ -52,7 +62,15 @@ else {
   create.click();
 }
 await sleep(1500);
-if ($("veil").classList.contains("on")) fail("dialog stayed open after create");
+if ($("veil").classList.contains("on")) {
+  // Everything below this point creates, sends and reads back one session, so
+  // a create that did not happen turns into eight failures about the session
+  // it would have made. The banner says why; nothing further is worth running.
+  const why = text($("banner")) || "no reason given";
+  fail(`dialog stayed open after create — ${why}`);
+  console.log("\nCHAT UI SMOKE FAILED");
+  process.exit(1);
+}
 
 $("input").value = "Reply with exactly: ui smoke ok";
 $("send").click();

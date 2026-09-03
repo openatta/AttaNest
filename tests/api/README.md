@@ -39,7 +39,7 @@ replaying session does not do.
 | `tests/api/` | the **backend**, through the client-facing API | a binary; a model for some suites |
 | `tests/browser/interface.spec.mjs` | layout and themes, in a real browser | chromium |
 | `tests/browser/interaction.spec.mjs` | typing, tool rows, permission cards — real UI on a real backend | chromium |
-| `tests/package-e2e.mjs` | a package from zip to a row on screen | chromium + a plugin-carrier build |
+| `tests/package-e2e.mjs` | a package from zip to a row on screen | chromium; the release binary |
 | `tests/topology-parity.mjs` | both topologies give the same answers | a running backend |
 | `tests/remote-smoke.mjs` | pairing, TLS, revocation | a reachable backend |
 

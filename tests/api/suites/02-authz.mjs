@@ -45,15 +45,17 @@ export default {
     },
 
     "adding an MCP server stays refused while installing a plugin does not": async ({ client }) => {
+      // Installing a package is this person's decision: it arrives with a
+      // manifest, a capability declaration and a disclosure. Adding an MCP
+      // server configures a subprocess-spawning tool with none of the three,
+      // so it is refused here and named in the reason.
       const mcp = await client.refused("mcp.addServer", {});
       assert(mcp && mcp.code === -32000, "mcp.addServer is not refused");
 
-      // Reachable — and in this build it answers PLUGINS_DISABLED, which is a
-      // different fact from being refused.
-      const plugins = await client.refused("plugin.list");
-      assert(plugins, "plugin.list answered in a build with no plugin carrier");
-      assert(/unavailable|disabled/i.test(plugins.message), `says "${plugins.message}"`);
-      assert(plugins.code !== -32000, "plugin.list was refused rather than unavailable");
+      const { methods } = await client.call("nest.reachable");
+      for (const method of ["nest.plugins.install", "nest.plugins.list"]) {
+        assert(methods.includes(method), `${method} is not reachable`);
+      }
     },
 
     "what did not take is queryable": async ({ client }) => {

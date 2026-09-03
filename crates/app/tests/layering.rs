@@ -168,7 +168,7 @@ fn neither_the_hub_nor_the_authorizer_names_a_topology() {
 /// Nest links no interpreter.
 ///
 /// Extending the agent is AttaCore's: the carrier, the sandbox, the
-/// capability gate. Nest may read a manifest — it reads two sections of one,
+/// capability gate. Nest may read a manifest — it reads one section of one,
 /// deliberately (§4.6) — but it must never be able to *run* what a package
 /// brought, because that is where a second answer to "what may an extension
 /// do" would come from.

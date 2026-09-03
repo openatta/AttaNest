@@ -168,8 +168,28 @@ export default {
           (f) => f.method === "nest.turn_settled" && f.params.session_id === created.session_id,
         ).length;
         for (let want = 1; want <= 2; want += 1) {
-          await client.waitFor(() => settled() >= want,
-            { timeout: 180_000, describe: `turn ${want} of 2 to settle` });
+          try {
+            await client.waitFor(() => settled() >= want,
+              { timeout: 180_000, describe: `turn ${want} of 2 to settle` });
+          } catch {
+            // A settlement that never arrives is two different facts, and
+            // guessing which would make this suite red for the provider's
+            // behaviour (§7.4). So ask: a session still running is an
+            // upstream that hung, and a session sitting idle with a
+            // settlement missing is a queue that did not drain — which is
+            // the thing this test is actually about.
+            const info = await client
+              .call("session.get", { session_id: created.session_id })
+              .catch(() => null);
+            const running = info?.turn_state && info.turn_state !== "idle";
+            if (running) {
+              inconclusive(
+                `the upstream never settled turn ${want} of 2 in 180s `
+                + `(the session is still ${info.turn_state})`,
+              );
+            }
+            assert(false, `turn ${want} of 2 never settled and the session is idle`);
+          }
         }
         const said = client.text(created.session_id);
         assert(/second/i.test(said), `the queued turn never ran: "${said.slice(0, 200)}"`);

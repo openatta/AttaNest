@@ -348,12 +348,12 @@ function renderPlugins(page) {
           el("div", "control", [
             button("btn sm outline", plugin.enabled ? t("settings.pluginDisable") : t("settings.pluginEnable"),
               async () => {
-                await call(plugin.enabled ? "plugin.disable" : "plugin.enable", { name: plugin.name });
+                await call(plugin.enabled ? "nest.plugins.disable" : "nest.plugins.enable", { name: plugin.name });
                 openSettings();
               }),
             button("btn sm danger", t("common.remove"), async () => {
               if (!confirm(t("settings.pluginRemoveConfirm", { name: plugin.name }))) return;
-              await call("plugin.uninstall", { name: plugin.name });
+              await call("nest.plugins.uninstall", { name: plugin.name });
               openSettings();
             }),
           ]),

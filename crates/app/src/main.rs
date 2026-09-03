@@ -191,15 +191,7 @@ async fn main() -> anyhow::Result<()> {
     let hub = Hub::new(engine, registry, cli.replay_dir.clone()).await?;
 
     // ── Built-ins, through the public door ──────────────────────────────
-    // Where the engine keeps installed packages. Nest reads two sections out
-    // of them and serves one directory; it never writes here.
-    let plugins_dir = roots.engine.join("plugins");
-    let builtin = Builtin::new(
-        hub.clone(),
-        roots.state.clone(),
-        roots.projects.clone(),
-        plugins_dir,
-    )?;
+    let builtin = Builtin::new(hub.clone(), roots.state.clone(), roots.projects.clone())?;
     {
         let mut registry = hub.registry_mut().await;
         builtin.register(&mut registry).await;

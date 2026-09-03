@@ -128,12 +128,13 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 
 Nest 补的是引擎有意不做的那一步：`plugin.install` 自己去取 URL，没有上传通道——包已经在
 跑引擎那台机器上时够用，在你笔记本上时就没有路。所以设置面板收一个 `.zip`，走大负载旁路
-送上去，再把落盘路径交给引擎。其余全部转手：列举、启停、卸载，以及引擎装完回的那份披露。
+送上去，再把落盘路径交给引擎。其余全部转手：列举、启停、卸载，以及引擎装完回的那份披露；
+只多做一步——Nest 在服务每个包的 `ui/` 目录，所以改变"装了什么"的调用之后要重读一遍。
 
-有一件事要知道：**AttaCore 一个构建带一种扩展载体，或者一种都不带**，脚本载体与
-WebAssembly 插件载体互斥。Nest 发的是脚本构建，所以在默认二进制上 `plugin.*` 一律回
-`PLUGINS_DISABLED`，界面也就如实这么说，而不是显示成一个空列表——"这个构建没有插件子系统"
-和"一个都没装"是两件不同的事。
+**出厂的那个二进制就能装包。** 包方案——manifest、下载、校验、解包、披露、生命周期——不与
+任何载体互斥，默认就在构建里；花二十兆的是 WebAssembly 载体，插件构建拿脚本载体去换的
+也是它。一个不带包方案的构建会回 `PLUGINS_DISABLED`，界面就如实这么说，而不是显示成一个
+空列表——"这个构建没有插件子系统"和"一个都没装"是两件不同的事。
 
 ## 目录
 
@@ -197,6 +198,8 @@ node tests/i18n-smoke.mjs                        # 语言包体检
 node tests/readme-pairing.mjs                    # 两份 README 是一起改的
 node tests/ui-smoke.mjs   <port> <token>         # 真引擎 + 真模型
 node tests/tool-smoke.mjs <port> <token>         # 真工具调用
+# 上面两个要后端带 `--scenes chat` 起；拓扑对比那个要后端同时服务两种拓扑：
+#   nest --scenes chat --profile <一份两种拓扑都列上的 profile>
 
 node tests/api/run.mjs                            # 后端，走它自己的 API
 node tests/api/run.mjs --live                     # …改成对着真模型跑
@@ -208,9 +211,8 @@ node tests/remote-smoke.mjs <port> <token> <code> # 配对、连接、吊销，�
 # 以及到底有没有渲染出来。
 npm install && npx playwright install chromium
 npx playwright test
-# 一个插件包，端到端。需要一个带插件载体的构建 —— 那不是 Nest 发的那个，
-# 原因见脚本自己的头注释。
-scripts/build-plugin-carrier.sh && node tests/package-e2e.mjs
+# 一个插件包，端到端 —— 从磁盘上的 zip 到屏幕上的一行，跑的就是出厂那个二进制。
+node tests/package-e2e.mjs
 
 # 对着真模型重录一份重放 fixture（需要 .env）。
 node tests/api/record-fixture.mjs <name> "<提示词>"

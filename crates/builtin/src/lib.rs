@@ -54,9 +54,6 @@ pub struct Builtin {
     /// explicitly configured root.
     projects_root: PathBuf,
     max_upload_bytes: usize,
-    /// Where the engine keeps installed packages. Nest reads two sections out
-    /// of them and serves one directory; it never writes here.
-    plugins_dir: PathBuf,
     /// Told when the installed set changes, so the static face and the hello
     /// payload can follow without a restart.
     on_packages_changed: Mutex<Option<PackagesChanged>>,
@@ -85,7 +82,13 @@ pub const METHODS: &[&str] = &[
     "nest.upload.begin",
     // The one thing AttaCore's installer cannot do for itself: receive a file.
     "nest.plugins.upload",
+    // Lifecycle. The engine does the work; these exist because changing what
+    // is installed changes what this host serves — see `plugins`.
     "nest.plugins.install",
+    "nest.plugins.uninstall",
+    "nest.plugins.enable",
+    "nest.plugins.disable",
+    "nest.plugins.reload",
     "nest.plugins.list",
 ];
 
@@ -94,7 +97,6 @@ impl Builtin {
         hub: Arc<Hub>,
         state_root: PathBuf,
         projects_root: PathBuf,
-        plugins_dir: PathBuf,
     ) -> anyhow::Result<Arc<Self>> {
         let store = Store::open(state_root)?;
         let upload_dir = store.root().join("uploads").join(std::process::id().to_string());
@@ -106,7 +108,6 @@ impl Builtin {
             upload_dir,
             projects_root,
             max_upload_bytes: 32 * 1024 * 1024,
-            plugins_dir,
             on_packages_changed: Mutex::new(None),
         }))
     }
@@ -117,10 +118,6 @@ impl Builtin {
 
     pub fn max_upload_bytes(&self) -> usize {
         self.max_upload_bytes
-    }
-
-    pub fn plugins_dir(&self) -> &Path {
-        &self.plugins_dir
     }
 
     pub fn hub(&self) -> &Arc<Hub> {
@@ -136,7 +133,7 @@ impl Builtin {
 
     /// What every installed package contributes to this side.
     pub async fn contributions(&self) -> Vec<packages::Contributions> {
-        packages::discover(&self.hub, &self.plugins_dir).await
+        packages::discover(&self.hub).await
     }
 
     /// Claim an upload grant. `None` means the token was never issued or has
@@ -177,6 +174,10 @@ impl Builtin {
             "nest.upload.begin" => self.upload_begin(params).await,
             "nest.plugins.upload" => self.plugins_upload(params).await,
             "nest.plugins.install" => self.plugins_install(params).await,
+            "nest.plugins.uninstall" => self.plugins_manage("plugin.uninstall", params).await,
+            "nest.plugins.enable" => self.plugins_manage("plugin.enable", params).await,
+            "nest.plugins.disable" => self.plugins_manage("plugin.disable", params).await,
+            "nest.plugins.reload" => self.plugins_manage("plugin.reload", params).await,
             "nest.plugins.list" => self.plugins_list(params).await,
             other => Err(RpcError::not_found(format!("`{other}` is not a built-in method"))),
         }

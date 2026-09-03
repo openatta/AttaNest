@@ -27,15 +27,15 @@
 //! pre-install inspection on this side would mean reading the package here,
 //! which is the thing this file exists not to do.
 //!
-//! # In this build there is nothing to install into
+//! # A build can still be one nothing installs into
 //!
-//! AttaCore carries one extension carrier or none, and the script carrier and
-//! the plugin carrier are mutually exclusive upstream. Nest ships the script
-//! build, so every `plugin.*` method answers `PLUGINS_DISABLED`. These
-//! methods pass that through unchanged rather than dressing it up as an empty
-//! list: "there is no plugin subsystem here" and "no plugins are installed"
-//! are different facts, and a client that cannot tell them apart shows the
-//! wrong screen.
+//! The package layer — manifest, fetch, checksum, unpack, disclosure,
+//! lifecycle — is exclusive with nothing upstream and is in the shipped
+//! build, so packages install here. A build made without it answers
+//! `PLUGINS_DISABLED`, and these methods pass that through unchanged rather
+//! than dressing it up as an empty list: "there is no plugin subsystem here"
+//! and "no plugins are installed" are different facts, and a client that
+//! cannot tell them apart shows the wrong screen.
 
 use nest_contract::RpcError;
 use serde_json::{json, Value};
@@ -66,16 +66,14 @@ impl Builtin {
 
     /// What is installed, and what of it reaches this side.
     ///
-    /// The engine's list, plus the two sections it ignores. One call, because
+    /// The engine's list, plus the one section it ignores. One call, because
     /// "what is installed" and "what will appear in my interface" are the
     /// same question asked by the same screen.
     pub(crate) async fn plugins_list(&self, _params: Value) -> Result<Value, RpcError> {
-        let listed = self.hub.engine_call("plugin.list", json!({})).await;
-        let here = packages::discover(&self.hub, self.plugins_dir()).await;
-        match listed {
+        match self.hub.engine_call("plugin.list", json!({})).await {
             Ok(value) => Ok(json!({
                 "plugins": value.get("plugins").cloned().unwrap_or(json!([])),
-                "contributes": here,
+                "contributes": packages::read_all(&value),
                 "available": true,
             })),
             // Not an empty list. "This build carries no plugin subsystem" and
@@ -117,6 +115,25 @@ impl Builtin {
         Ok(result)
     }
 
+    /// Hand a lifecycle call to the engine, then re-read what is installed.
+    ///
+    /// The engine owns enable, disable, uninstall and reload; nothing is
+    /// decided here and no parameter is invented. What the host adds is the
+    /// step after: it serves each package's `ui/` directory and publishes the
+    /// contribution set, so a call that changes what is installed has to be
+    /// followed by re-reading it. Passing `plugin.*` straight through would
+    /// leave a disabled package's module still being served, and a client
+    /// with no way to notice.
+    pub(crate) async fn plugins_manage(
+        &self,
+        method: &'static str,
+        params: Value,
+    ) -> Result<Value, RpcError> {
+        let result = self.hub.engine_call(method, params).await?;
+        self.refresh().await;
+        Ok(result)
+    }
+
     /// Re-read what is installed, and tell whoever is serving it.
     ///
     /// The static face and the hello payload are both downstream of this, and
@@ -124,7 +141,7 @@ impl Builtin {
     /// calls back rather than reaching up.
     pub async fn refresh(&self) {
         if let Some(on_change) = self.on_packages_changed.lock().await.as_ref() {
-            on_change(packages::discover(&self.hub, &self.plugins_dir).await);
+            on_change(packages::discover(&self.hub).await);
         }
     }
 }

@@ -145,14 +145,17 @@ channel, which is fine when the package is already on the machine running the
 engine and useless when it is on your laptop. So the settings panel takes a
 `.zip`, sends it up the bulk channel, and hands the engine the path it landed
 at. Everything else — list, enable, disable, uninstall, and the disclosure the
-engine returns from the install — passes straight through.
+engine returns from the install — passes through, with one step added after:
+Nest serves each package's `ui/` directory, so a call that changes what is
+installed is followed by re-reading what is.
 
-One thing to know: **AttaCore carries one extension carrier or none**, and the
-script carrier and the WebAssembly plugin carrier are mutually exclusive. Nest
-ships the script build, so in the default binary every `plugin.*` call answers
-`PLUGINS_DISABLED`, and the interface says exactly that rather than showing an
-empty list — "this build has no plugin subsystem" and "nothing is installed"
-are different facts.
+**The shipped binary installs packages.** The package layer — manifest, fetch,
+checksum, unpack, disclosure, lifecycle — is exclusive with no carrier and is
+in the default build; the WebAssembly carrier is what costs twenty megabytes
+and what a plugin build gives up scripts to get. A build made without the
+package layer answers `PLUGINS_DISABLED`, and the interface says exactly that
+rather than showing an empty list — "this build has no plugin subsystem" and
+"nothing is installed" are different facts.
 
 ## Directories
 
@@ -218,6 +221,9 @@ node tests/i18n-smoke.mjs                        # language-pack health
 node tests/readme-pairing.mjs                    # the two READMEs moved together
 node tests/ui-smoke.mjs   <port> <token>         # real engine + real model
 node tests/tool-smoke.mjs <port> <token>         # real tool calls
+# The two above want a backend started with `--scenes chat`, and the parity
+# test wants one serving both topologies:
+#   nest --scenes chat --profile <a profile listing both topologies>
 
 node tests/api/run.mjs                            # the backend, through its own API
 node tests/api/run.mjs --live                     # …against a real model instead
@@ -229,9 +235,8 @@ node tests/remote-smoke.mjs <port> <token> <code> # pair, connect, revoke, over 
 # cannot do — layout, themes, and whether anything actually renders.
 npm install && npx playwright install chromium
 npx playwright test
-# A package, end to end. Needs a build carrying the plugin carrier, which is
-# not the one Nest ships — see the script's own header for why.
-scripts/build-plugin-carrier.sh && node tests/package-e2e.mjs
+# A package, end to end — zip on disk to a row on screen, on the shipped binary.
+node tests/package-e2e.mjs
 
 # Re-record a replay fixture against a real model (needs .env).
 node tests/api/record-fixture.mjs <name> "<the prompt>"

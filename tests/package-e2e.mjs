@@ -8,14 +8,9 @@
 // the row it registered **replaced** the built-in one for the tool it claims
 // and left the others alone.
 //
-// # Why this builds its own backend
-//
-// The engine carries one extension carrier or none, and packaging is bundled
-// with the WebAssembly one by a feature flag — so the build Nest ships
-// answers `PLUGINS_DISABLED` and installs nothing. This compiles a backend
-// with `--features plugin-compile` and skips, loudly, if it cannot. When
-// AttaCore splits packaging from the carrier, this stops needing its own
-// build. (Filed; see `.local/attacore-issue-plugin-carriers.md`.)
+// The shipped binary, not a special one. The package layer is exclusive with
+// no carrier upstream and is in the default build, so this is the same
+// artifact a user runs — which is the only version of this test worth having.
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -33,23 +28,11 @@ const fail = (m) => { console.log("FAIL:", m); failures += 1; };
 const ok = (m) => console.log("ok —", m);
 const skip = (m) => { console.log("SKIP:", m); process.exit(0); };
 
-/* ── a backend that can install packages ──────────────────────────────── */
+/* ── the backend ──────────────────────────────────────────────────────── */
 
-const binary = process.env.NEST_PLUGIN_BINARY
-  ?? join(ROOT, "target", "plugin-carrier", "nest");
+const binary = process.env.NEST_BINARY ?? join(ROOT, "target", "release", "nest");
 if (!existsSync(binary)) {
-  // Not built here, and not for tidiness: the carrier is chosen in the
-  // workspace's own dependency table, and `cargo --config` does not reach a
-  // path dependency there. So the binary is made once, deliberately, and this
-  // says how rather than editing a manifest out from under whoever is
-  // building.
-  skip(
-    `no plugin-carrier backend at ${binary}\n`
-    + "  This test needs a build with the plugin carrier, which is not the one Nest ships.\n"
-    + "  Make one:\n"
-    + "    scripts/build-plugin-carrier.sh\n"
-    + "  or point NEST_PLUGIN_BINARY at your own.",
-  );
+  skip(`no backend at ${binary} — build one with \`cargo build --release -p nest\``);
 }
 
 const scratch = mkdtempSync(join(tmpdir(), "nest-pkg-e2e-"));
