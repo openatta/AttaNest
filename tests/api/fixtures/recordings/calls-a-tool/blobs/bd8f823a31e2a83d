@@ -1,0 +1,1 @@
+{"role":"system","content":"# System context\n\n- User messages may include <system-reminder> tags. Tags contain information from the system. They bear no direct relation to the specific tool results or user messages in which they appear, so treat them as supplementary context.\n","cache_strategy":"global","name":"scene.system_context"}

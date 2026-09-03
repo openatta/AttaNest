@@ -8,7 +8,7 @@
 //   node tests/reducer-smoke.mjs
 
 import { loadApp } from "./dom.mjs";
-import zh from "../assets/src/i18n/zh-CN.js";
+import zh from "../ui/runtime/i18n/zh-CN.js";
 
 /** Expected copy comes from the same dictionary the app renders from. */
 const T = (key, vars) => (vars
@@ -59,11 +59,9 @@ function sessionRows() {
     name: "测试会话",
     scene: "coding",
     project_root: "/tmp/project",
-    workspace_id: "w-1",
     message_count: historyMessages.length,
     status: "active",
     running: false,
-    archived: false,
     last_active: new Date().toISOString(),
   }];
   for (let i = 2; i <= 7; i += 1) {
@@ -72,11 +70,9 @@ function sessionRows() {
       name: `会话 ${i}`,
       scene: "coding",
       project_root: "/tmp/project",
-      workspace_id: "w-1",
       message_count: 4,
       status: "inactive",
       running: false,
-      archived: i === 7,
       last_active: new Date(Date.now() - i * 3600e3).toISOString(),
     });
   }
@@ -85,9 +81,26 @@ function sessionRows() {
 
 function answer(method, params) {
   switch (method) {
+    // Nothing happens before this. Version and topology are settled once, and
+    // a mismatch is refused rather than downgraded — see the handshake case
+    // at the end of this file.
+    case "nest.handshake":
+      return {
+        protocol_version: 3,
+        contrib_api_version: 1,
+        topology: params.topology,
+        topologies: ["single_duplex"],
+        subject: { kind: "device", id: "test" },
+      };
+    // What this subject may call, answered by the authorization layer. A
+    // contribution's RPC client is filtered by it.
+    case "nest.reachable":
+      return { methods: [] };
     case "nest.hello":
       return {
-        protocol_version: 2,
+        protocol_version: 3,
+        contrib_api_version: 1,
+        contributions: [],
         engine: { model: "test-model", active_scenes: ["coding"], status: {} },
         scenes: [{
           scene: "coding",
@@ -102,8 +115,24 @@ function answer(method, params) {
         limits: { max_frame_bytes: 16777216, max_upload_bytes: 33554432 },
         cwd: "/tmp/project",
       };
+    // The shape the real backend answers with, and nothing more.
+    //
+    // This fake used to return `workspaces`, `prefs`, `workspace_id` and
+    // `archived` here — fields the backend had stopped sending. Every test in
+    // this file passed against them while the real product quietly lost
+    // renaming, archiving, grouping and view preferences. A fake that is more
+    // generous than the thing it stands in for tests nothing.
     case "nest.sessions":
-      return { sessions: sessionRows(), workspaces, prefs: {} };
+      return { sessions: sessionRows() };
+    case "nest.workspaces.list":
+      return {
+        workspaces,
+        prefs: {},
+        // One archived session, so the sidebar's archived toggle has
+        // something to toggle. Keyed by id, the way the real overlay is.
+        sessions: Object.fromEntries(
+          sessionRows().map((s) => [s.session_id, { title: null, archived: s.session_id === "S-7" }])),
+      };
     case "nest.workspaces.update": {
       const workspace = workspaces.find((w) => w.id === params.id);
       if (params.collapsed !== undefined) workspace.collapsed = params.collapsed;
@@ -527,10 +556,20 @@ else ok("usage after settle: 1540 tokens");
 if (all(".blk.a")[0].classList.contains("streaming")) fail("caret still showing after settle");
 else ok("streaming caret cleared on settle");
 
-socket.push("nest.daemon_event", { kind: "session_evicted", session_id: SID, reason: "idle_timeout" });
+/* Host events. AttaCore emits exactly three kinds and its protocol says so,
+   so this drives the one that has something to say and then checks that a
+   kind it does not send raises nothing — a banner with no source would be the
+   interface lying about what it can observe. */
+socket.push("nest.host_event", { kind: "mcp_connect_failed", server: "files", error: "spawn failed" });
 await sleep(30);
-if (!$("banner").classList.contains("on")) fail("daemon event produced no banner");
+if (!$("banner").classList.contains("on")) fail("mcp_connect_failed produced no banner");
 else ok(`banner: "${text($("banner")).slice(0, 36)}"`);
+
+const bannerBefore = text($("banner"));
+socket.push("nest.host_event", { kind: "session_evicted", session_id: SID, reason: "idle_timeout" });
+await sleep(30);
+if (text($("banner")) !== bannerBefore) fail("a kind the engine never sends changed the banner");
+else ok("no banner for a kind AttaCore does not emit");
 
 /* ── slash completion ───────────────────────────────────────────────────── */
 $("input").value = "/co";

@@ -1,0 +1,24 @@
+# A single-machine or edge node: one connection, the interface served from
+# here, one scene.
+#
+# Changing the shape of this product is meant to be a configuration change,
+# not a fork — this file and `headless.toml` differ in a handful of lines and
+# produce two genuinely different deployments.
+
+[engine]
+scene = "coding"
+scenes = ["chat"]
+model = "claude-sonnet-4-6"
+session_cap = 16
+session_idle_timeout_secs = 3600
+
+[transport]
+# One bidirectional connection carries all five channel semantics. The edge
+# default: out here a connection costs more than middleware does, and a weak
+# link makes every reconnect and heartbeat expensive.
+topologies = ["single_duplex"]
+host = "127.0.0.1"
+port = 4080
+
+[ui]
+dir = "./ui"

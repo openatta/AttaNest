@@ -1,0 +1,12 @@
+{
+  "name": "nest-ui-tests",
+  "private": true,
+  "description": "Browser tests for the interface. Everything else runs on node alone.",
+  "scripts": {
+    "test:browser": "playwright test",
+    "install:browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

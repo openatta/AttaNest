@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const stylesDir = join(root, "assets", "styles");
+const stylesDir = join(root, "ui", "styles");
 const css = readdirSync(stylesDir)
   .filter((name) => name.endsWith(".css"))
   .map((name) => readFileSync(join(stylesDir, name), "utf8"))
@@ -26,7 +26,7 @@ const walk = (dir) => {
     else if (entry.name.endsWith(".js")) sources.push([path, readFileSync(path, "utf8")]);
   }
 };
-walk(join(root, "assets", "src"));
+walk(join(root, "ui"));
 
 const fail = (m) => { console.log("FAIL:", m); process.exitCode = 1; };
 const ok = (m) => console.log("ok —", m);
@@ -73,7 +73,7 @@ if (rawColors.length) fail(`raw colors outside tokens.css: ${rawColors.slice(0, 
 else ok("feature styles use tokens only");
 
 /* ── every id the app addresses exists in the markup or is built by a view ─ */
-const html = readFileSync(join(root, "assets", "index.html"), "utf8");
+const html = readFileSync(join(root, "ui", "index.html"), "utf8");
 const declared = new Set([...html.matchAll(/\bid="([-\w]+)"/g)].map((m) => m[1]));
 const created = new Set();
 for (const [, source] of sources) {

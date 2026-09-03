@@ -1,0 +1,1 @@
+{"role":"system","content":"# Code style\n\nWrite code that reads like the surrounding code: match its comment density, naming, and idiom. For new files, prefer the project's established patterns.\n","cache_strategy":"global","name":"scene.code_style"}

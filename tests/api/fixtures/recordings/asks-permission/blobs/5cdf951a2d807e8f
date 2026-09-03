@@ -1,0 +1,1 @@
+{"role":"assistant","content":[{"type":"tool_use","id":"call_00_ET_YtASVD94kUJyRxN2ooXm3923","name":"Bash","input":{"command":"rm -f /tmp/nest-fixture-probe","description":"Remove probe file"}}]}

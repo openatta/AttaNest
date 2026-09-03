@@ -1,0 +1,18 @@
+# A node in a fleet, or an automation target: RPC only, no interface.
+#
+# Nothing is served but the protocol. The interface lives somewhere else, or
+# there is none — the transport can decline to serve any static resource at
+# all, and that is a supported shape rather than a degraded one.
+
+[engine]
+scene = "coding"
+session_cap = 4
+session_idle_timeout_secs = 600
+
+[transport]
+topologies = ["single_duplex"]
+host = "127.0.0.1"
+port = 4080
+
+[ui]
+# No `dir`: no static face.

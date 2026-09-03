@@ -48,8 +48,13 @@ says so.
   the complete tool catalog and the call configuration, with each block and each tool naming the
   stage that produced it (`identity`, `skills`, `memory`, `mcp:<server>`, `plugin:<id>`). See below.
 
-- **No build step for the frontend.** `nest --assets-dir ./assets` serves the SPA from disk instead
-  of from the binary: edit, reload, done.
+- **The interface is a separate artifact, assembled out of six named seams.** The tool rows,
+  the panels, the sidebar groups are registrations, not a switch statement — so a different product
+  is a different set of registrations, not a fork. Point `--ui-dir` somewhere else and nothing is
+  recompiled; `--headless` serves no interface at all.
+
+- **No build step for the frontend.** Plain ES modules and CSS. `nest --ui-dir ./ui` serves them
+  from disk: edit, reload, done.
 
 - **It shares state with the terminal.** The engine directory is the same `~/.atta` that
   `attacored` and AttaCode use, so a session you ran in the TUI opens here, and vice versa.
@@ -117,9 +122,33 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 | `--model` / `--max-tokens` | For new sessions. The three settings tiers still outrank them, as in `attacored` |
 | `--session-cap` / `--session-idle-timeout` | Ceiling on live sessions, and idle reclamation |
 | `--permission-prompt-timeout` | How long an unanswered permission prompt waits before counting as a refusal (default 300s; the UI counts down) |
-| `--assets-dir` | Serve the frontend from disk instead of from the binary — for development |
+| `--ui-dir` | Where the built interface is. Omit it, or pass `--headless`, for an RPC-only node |
+| `--profile` | A profile: scenes, providers, interface, transport topology. Flags override it |
 
 </details>
+
+## Plugins
+
+Plugins are AttaCore's, end to end — the manifest, the capability gate, the
+sandbox, the disclosure, the lifecycle. Writing a plugin for Nest is writing a
+plugin for AttaCore, and Nest neither reads a package nor runs one. A second
+implementation on this side would be a second truth about what an extension
+may do, and only one of the two would actually stop anything.
+
+What Nest adds is the one step the engine deliberately does not take:
+`plugin.install` fetches a package from a URL it is given and has no upload
+channel, which is fine when the package is already on the machine running the
+engine and useless when it is on your laptop. So the settings panel takes a
+`.zip`, sends it up the bulk channel, and hands the engine the path it landed
+at. Everything else — list, enable, disable, uninstall, and the disclosure the
+engine returns from the install — passes straight through.
+
+One thing to know: **AttaCore carries one extension carrier or none**, and the
+script carrier and the WebAssembly plugin carrier are mutually exclusive. Nest
+ships the script build, so in the default binary every `plugin.*` call answers
+`PLUGINS_DISABLED`, and the interface says exactly that rather than showing an
+empty list — "this build has no plugin subsystem" and "nothing is installed"
+are different facts.
 
 ## Directories
 
@@ -134,40 +163,74 @@ Two, and only two:
 nest --atta-dir /srv/atta --data-dir /srv/projects
 ```
 
-What you install is one binary. The web app is compiled into it and nothing is read from the
-install directory at runtime. Nest's own bookkeeping — workspaces, titles, view preferences, the
-token, uploads — is data too, and lives in `.nest/` under the project directory.
+What you install is one binary plus, optionally, the interface directory. Nothing is read from the
+install directory at runtime, so upgrading is replacing the file. Nest's own bookkeeping —
+workspaces, titles, view preferences, the token, uploads — is data too, and lives in `.nest/`
+under the project directory.
 
 ## Layout
 
+The kernel is four things — assembly, hub, transport, authorization — and the dependency direction
+between them is one-way. `crates/app/tests/layering.rs` asserts it rather than describing it.
+
 ```
-crates/app      the `nest` binary
-crates/web      axum: static files, /ws, /upload, Origin + token + CSP
-crates/hub      the session hub: sole engine connection, event replay, send queue, method allow-list
-crates/engine   AttaCore assembly
-assets/         the SPA, unbuilt: index.html + styles/*.css + src/**.js, compiled into the binary
-core/           AttaCore (submodule)
+crates/app        the `nest` binary: profile, wiring, the authorization table
+crates/transport  channel semantics over a chosen topology: frames, handshake, static face, bulk
+crates/authz      the one admission point: subject x method, default deny, audited
+crates/hub        the session hub: subscription, replay, seq, turn ownership, queue
+crates/assembly   builds the AttaCore engine in-process from a profile
+crates/contrib    the interface's seams: the generated catalog and the registry
+crates/builtin    Nest's own methods and interface parts, through that registry
+crates/contract   the types those layers hand each other, and nothing else
+
+ui/               the interface, a separate artifact: runtime/, builtin/, shell/, styles/
+core/             AttaCore (submodule)
 ```
 
 ## Documentation
 
-[docs/architecture.md](docs/architecture.md) is the design record — why the browser does not talk to
-the engine directly (§3), how catch-up and replay keep a reload from losing anything (§5), which
-methods are not exposed to the browser (§4.1), and the trade-offs behind running the engine
-in-process (§2). *Written in Chinese.*
+[docs/concept_and_architecture.md](docs/concept_and_architecture.md) is the design: what Nest is,
+which four things the kernel is and why none of them is pluggable, the five channel semantics and
+the three topologies they map onto, the plugin model, and what is deliberately not being built.
+
+[docs/contribution_points.md](docs/contribution_points.md) is the catalog — nine points, what each
+one is given and when it is evaluated. Its table is generated from the code, and a test fails when
+the two disagree. *Both written in Chinese.*
 
 ## Tests
 
 ```sh
 cargo clippy --workspace
-cargo test -p nest -p nest-hub -p nest-engine -p nest-web   # our Rust tests
+# Ours only. AttaCore's own tests assume it is its own workspace root.
+cargo test -p nest -p nest-hub -p nest-transport -p nest-authz \
+           -p nest-assembly -p nest-contrib \
+           -p nest-builtin -p nest-contract
 
 node tests/style-lint.mjs                        # static style checks: icon sizing, tokens, ids
+node tests/contrib-smoke.mjs                     # the contribution points, and a refused handshake
+node tests/budget.mjs                            # the performance budget, against a release build
 node tests/reducer-smoke.mjs                     # frontend logic, offline, fastest
 node tests/i18n-smoke.mjs                        # language-pack health
 node tests/readme-pairing.mjs                    # the two READMEs moved together
 node tests/ui-smoke.mjs   <port> <token>         # real engine + real model
 node tests/tool-smoke.mjs <port> <token>         # real tool calls
+
+node tests/api/run.mjs                            # the backend, through its own API
+node tests/api/run.mjs --live                     # …against a real model instead
+node tests/api/run.mjs --topology split_streams   # the same suites over the other topology
+node tests/topology-parity.mjs <port> <token>     # both topologies, same answers
+node tests/remote-smoke.mjs <port> <token> <code> # pair, connect, revoke, over TLS
+
+# The browser. Everything above runs on node alone; this is what a fake DOM
+# cannot do — layout, themes, and whether anything actually renders.
+npm install && npx playwright install chromium
+npx playwright test
+# A package, end to end. Needs a build carrying the plugin carrier, which is
+# not the one Nest ships — see the script's own header for why.
+scripts/build-plugin-carrier.sh && node tests/package-e2e.mjs
+
+# Re-record a replay fixture against a real model (needs .env).
+node tests/api/record-fixture.mjs <name> "<the prompt>"
 ```
 
 `<token>` comes from the token file `nest` prints at startup (`<data-dir>/.nest/token`).

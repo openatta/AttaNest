@@ -5,19 +5,27 @@ edition      = { workspace = true }
 rust-version = { workspace = true }
 license      = { workspace = true }
 publish      = false
-description  = "AttaCore's web front end: one binary, one page, one WebSocket"
+description  = "AttaCore, assembled into a product: one binary, one process, one user"
 
 [[bin]]
 name = "nest"
 path = "src/main.rs"
 
 [dependencies]
-nest-engine = { workspace = true }
-nest-hub    = { workspace = true }
-nest-web    = { workspace = true }
+nest-assembly  = { workspace = true }
+nest-authz     = { workspace = true }
+nest-builtin   = { workspace = true }
+nest-contract  = { workspace = true }
+nest-contrib   = { workspace = true }
+nest-hub       = { workspace = true }
+nest-transport = { workspace = true }
 tokio       = { workspace = true }
+async-trait = { workspace = true }
+history     = { workspace = true }
+base        = { workspace = true }
 anyhow      = { workspace = true }
 clap        = { workspace = true }
 tracing     = { workspace = true }
 tracing-subscriber = { workspace = true }
+serde_json  = { workspace = true }
 uuid        = { workspace = true }

@@ -10,7 +10,7 @@
 //   node tests/tool-smoke.mjs <port> <token> [project_root]
 
 import { loadApp } from "./dom.mjs";
-import zh from "../assets/src/i18n/zh-CN.js";
+import zh from "../ui/runtime/i18n/zh-CN.js";
 
 /** Expected copy comes from the same dictionary the app renders from. */
 const T = (key, vars) => (vars

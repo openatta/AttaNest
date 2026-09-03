@@ -44,8 +44,11 @@ key 即可 —— 它写进 `settings.json`，不进浏览器也不进日志。�
   而且每一块、每一个工具都说得出自己出自哪个装配阶段（`identity`、`skills`、`memory`、
   `mcp:<server>`、`plugin:<id>`）。见下。
 
-- **前端没有构建步骤。** `nest --assets-dir ./assets` 让 SPA 从磁盘读而不是从二进制读：改完
-  刷新就行。
+- **界面是独立产物，由六个具名接缝拼起来。** 工具行、详情面板、侧栏分组都是注册，不是 switch
+  分支——换一个产品是换一批注册，不是 fork。`--ui-dir` 指到别处什么都不用重编译；
+  `--headless` 则一张界面都不提供。
+
+- **前端没有构建步骤。** 原生 ES 模块加 CSS，`nest --ui-dir ./ui` 从磁盘读：改完刷新就行。
 
 - **它和终端共用状态。** 引擎目录就是 `attacored` 与 AttaCode 用的那个 `~/.atta`，所以在 TUI
   里跑过的会话在这里能直接打开，反过来也一样。
@@ -108,9 +111,25 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 | `--model` / `--max-tokens` | 给新会话用。settings 三层仍然优先于它，与 `attacored` 一致 |
 | `--session-cap` / `--session-idle-timeout` | 活跃会话上限与空闲回收 |
 | `--permission-prompt-timeout` | 权限提问多久没人答就按拒绝处理（默认 300 秒，UI 上是倒计时） |
-| `--assets-dir` | 前端从磁盘读而不是从二进制读 —— 开发时用 |
+| `--ui-dir` | 界面产物在哪。不给它、或给 `--headless`，就是一个纯 RPC 节点 |
+| `--profile` | 一份 profile：场景、provider、界面、传输拓扑。命令行参数覆盖它 |
 
 </details>
+
+## 插件
+
+插件整件事都是 AttaCore 的——manifest、能力门控、沙箱、披露、生命周期。给 Nest 写插件就是
+给 AttaCore 写插件，Nest 既不读一个包，也不跑一个包。这一侧再实现一遍，同一件事就有两处
+真相，而两处里只有一处真的拦得住。
+
+Nest 补的是引擎有意不做的那一步：`plugin.install` 自己去取 URL，没有上传通道——包已经在
+跑引擎那台机器上时够用，在你笔记本上时就没有路。所以设置面板收一个 `.zip`，走大负载旁路
+送上去，再把落盘路径交给引擎。其余全部转手：列举、启停、卸载，以及引擎装完回的那份披露。
+
+有一件事要知道：**AttaCore 一个构建带一种扩展载体，或者一种都不带**，脚本载体与
+WebAssembly 插件载体互斥。Nest 发的是脚本构建，所以在默认二进制上 `plugin.*` 一律回
+`PLUGINS_DISABLED`，界面也就如实这么说，而不是显示成一个空列表——"这个构建没有插件子系统"
+和"一个都没装"是两件不同的事。
 
 ## 目录
 
@@ -125,38 +144,72 @@ nest --port 4080 --scene coding --scenes chat,research --model claude-sonnet-5
 nest --atta-dir /srv/atta --data-dir /srv/projects
 ```
 
-安装物只有这一个二进制。网页应用编译在里面，运行时不从安装目录读任何东西。Nest 自己的账本
-（工作区、标题、视图偏好、token、上传）也是数据，放在项目目录里的 `.nest/`。
+安装物是这一个二进制，加上可选的界面产物目录。运行时不从安装目录读任何东西，所以升级就是换掉
+那个文件。Nest 自己的账本（工作区、标题、视图偏好、token、上传）也是数据，放在项目目录里的
+`.nest/`。
 
 ## 结构
 
+内核是四件事 —— 装配、中枢、传输、授权 —— 它们之间的依赖是单向的。这条规则不是写在文档里，
+是 `crates/app/tests/layering.rs` 断言出来的。
+
 ```
-crates/app      bin `nest`
-crates/web      axum：静态面、/ws、/upload、Origin + token + CSP
-crates/hub      会话中枢：唯一的引擎连接、事件重放、发送队列、方法白名单
-crates/engine   AttaCore 装配
-assets/         无构建的 SPA：index.html + styles/*.css + src/**.js，编译进二进制
-core/           AttaCore（submodule）
+crates/app        bin `nest`：profile、装配顺序、授权表
+crates/transport  通道语义 + 拓扑：帧、握手、静态面、大负载旁路
+crates/authz      这个进程唯一的准入点：主体 × 方法，默认拒绝，可审计
+crates/hub        会话中枢：订阅、重放、seq、turn 所有权、队列
+crates/assembly   照 profile 把 AttaCore 引擎在进程内建起来
+crates/contrib    界面的接缝：由代码生成的目录，与注册表
+crates/builtin    Nest 自己的方法与界面部件，走的就是那个注册表
+crates/contract   上面这些层互相递交的类型，仅此而已
+
+ui/               界面，独立产物：runtime/、builtin/、shell/、styles/
+core/             AttaCore（submodule）
 ```
 
 ## 文档
 
-[docs/architecture.md](docs/architecture.md) 是设计记录 —— 为什么浏览器不直连引擎（§3）、追赶
-与重放怎么保证刷新不丢内容（§5）、哪些方法不对浏览器开放（§4.1）、引擎跑在进程内的取舍
-（§2）。
+[docs/concept_and_architecture.md](docs/concept_and_architecture.md) 是设计 —— Nest 是什么、
+内核是哪四件事、为什么它们一件都不可插拔、五种通道语义与它们映射到的三种拓扑、插件模型，
+以及明确不做的事。
+
+[docs/contribution_points.md](docs/contribution_points.md) 是贡献点目录 —— 九个点，各自给什么、
+什么时候求值。它那张表由代码生成，对不上就有测试失败。
 
 ## 测试
 
 ```sh
 cargo clippy --workspace
-cargo test -p nest -p nest-hub -p nest-engine -p nest-web   # 我们的 Rust 测试
+# 只跑我们的。被吸收进来的 AttaCore crate 里有测试假定 Core 自己是 workspace 根。
+cargo test -p nest -p nest-hub -p nest-transport -p nest-authz \
+           -p nest-assembly -p nest-contrib \
+           -p nest-builtin -p nest-contract
 
 node tests/style-lint.mjs                        # 样式静态检查（图标尺寸、令牌、id）
+node tests/contrib-smoke.mjs                     # 贡献点，以及一次被拒绝的握手
+node tests/budget.mjs                            # 性能预算，对着 release 构建
 node tests/reducer-smoke.mjs                     # 前端逻辑，离线，最快
 node tests/i18n-smoke.mjs                        # 语言包体检
 node tests/readme-pairing.mjs                    # 两份 README 是一起改的
 node tests/ui-smoke.mjs   <port> <token>         # 真引擎 + 真模型
 node tests/tool-smoke.mjs <port> <token>         # 真工具调用
+
+node tests/api/run.mjs                            # 后端，走它自己的 API
+node tests/api/run.mjs --live                     # …改成对着真模型跑
+node tests/api/run.mjs --topology split_streams   # 同一批用例走另一种拓扑
+node tests/topology-parity.mjs <port> <token>     # 两种拓扑，同样的答案
+node tests/remote-smoke.mjs <port> <token> <code> # 配对、连接、吊销，走 TLS
+
+# 真浏览器。上面那些只要 node；这一层做的是假 DOM 做不到的事 —— 布局、主题，
+# 以及到底有没有渲染出来。
+npm install && npx playwright install chromium
+npx playwright test
+# 一个插件包，端到端。需要一个带插件载体的构建 —— 那不是 Nest 发的那个，
+# 原因见脚本自己的头注释。
+scripts/build-plugin-carrier.sh && node tests/package-e2e.mjs
+
+# 对着真模型重录一份重放 fixture（需要 .env）。
+node tests/api/record-fixture.mjs <name> "<提示词>"
 ```
 
 `<token>` 从 `nest` 启动时打印的 token 文件里读（`<data-dir>/.nest/token`）。

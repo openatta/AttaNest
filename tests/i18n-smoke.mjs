@@ -8,8 +8,8 @@
 //   node tests/i18n-smoke.mjs
 
 import { loadApp } from "./dom.mjs";
-import zh from "../assets/src/i18n/zh-CN.js";
-import en from "../assets/src/i18n/en.js";
+import zh from "../ui/runtime/i18n/zh-CN.js";
+import en from "../ui/runtime/i18n/en.js";
 
 const fail = (m) => { console.log("FAIL:", m); process.exitCode = 1; };
 const ok = (m) => console.log("ok —", m);
@@ -80,7 +80,7 @@ if (text(newButton).includes(zh["sidebar.newSession"])) fail("zh copy leaked int
 
 // Switching locales repaints; it must not re-register anything. A leaked
 // subscription shows up as a second identical node after two switches.
-const { setLocale } = await import("../assets/src/i18n/index.js");
+const { setLocale } = await import("../ui/runtime/i18n/index.js");
 setLocale("zh-CN");
 await sleep(30);
 setLocale("en");

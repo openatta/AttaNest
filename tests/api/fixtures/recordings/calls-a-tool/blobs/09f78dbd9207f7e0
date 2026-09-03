@@ -1,0 +1,1 @@
+{"role":"assistant","content":[{"type":"tool_use","id":"call_00_ET_sCIiBYmcCrX5G05VzQsC9044","name":"Bash","input":{"command":"echo nest-fixture","description":"Run echo nest-fixture"}}]}

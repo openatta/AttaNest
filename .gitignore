@@ -4,3 +4,7 @@
 .env
 /.atta
 /3rds
+/node_modules
+/test-results
+/playwright-report
+tests/browser/.running.json

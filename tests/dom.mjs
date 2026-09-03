@@ -200,7 +200,7 @@ function buildDocument(html) {
  * @returns {Promise<{byId: Map, body: El, $: Function, errors: string[]}>}
  */
 export async function loadApp({ token = "T", port = "0", WebSocket: socket, locale = "zh-CN" } = {}) {
-  const html = readFileSync(join(root, "assets", "index.html"), "utf8");
+  const html = readFileSync(join(root, "ui", "index.html"), "utf8");
   const { byId, body, head } = buildDocument(html);
 
   const meta = new El("meta");
@@ -270,7 +270,7 @@ export async function loadApp({ token = "T", port = "0", WebSocket: socket, loca
   process.on("uncaughtException", record("uncaught exception"));
 
   // Cache-busted so repeated loads in one process get fresh module state.
-  const entry = pathToFileURL(join(root, "assets", "src", "main.js"));
+  const entry = pathToFileURL(join(root, "ui", "main.js"));
   try {
     await import(`${entry.href}?t=${Date.now()}`);
   } catch (e) {

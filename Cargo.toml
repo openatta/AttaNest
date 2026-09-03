@@ -1,33 +1,62 @@
 [workspace]
 resolver = "2"
-members = ["crates/app", "crates/engine", "crates/hub", "crates/web"]
+members = [
+    "crates/app",
+    "crates/assembly",
+    "crates/authz",
+    "crates/builtin",
+    "crates/contract",
+    "crates/contrib",
+    "crates/hub",
+    "crates/transport",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+# `script-host` (the QuickJS carrier, on by default — see the `daemon` entry
+# below) needs 1.87. The floor is the whole graph's, so it is declared here
+# rather than discovered at link time.
+rust-version = "1.87"
 license = "Apache-2.0"
 publish = false
 authors = ["Nest contributors"]
 
 # ──────────────────────────────────────────────
 # Nest's own crates
+#
+# The dependency direction is one-way and each layer is ignorant of the one
+# above it; `tests/layering.rs` asserts it rather than leaving it to review.
+#
+#   app ─→ transport ─→ authz ─┐
+#     └───→ builtin ──→ hub ────┴─→ contract        (pure types, no deps)
+#                        └────→ assembly → AttaCore
+#                        └────→ contrib ← plugin
 # ──────────────────────────────────────────────
 [workspace.dependencies]
-nest-engine = { path = "crates/engine" }
-nest-hub    = { path = "crates/hub" }
-nest-web    = { path = "crates/web" }
+nest-assembly  = { path = "crates/assembly" }
+nest-authz     = { path = "crates/authz" }
+nest-builtin   = { path = "crates/builtin" }
+nest-contract  = { path = "crates/contract" }
+nest-contrib   = { path = "crates/contrib" }
+nest-hub       = { path = "crates/hub" }
+nest-transport = { path = "crates/transport" }
 
 # ──────────────────────────────────────────────
 # AttaCore (submodule at core/)
 #
-# `daemon` runs in-process here — see docs/architecture.md §2. Its default
-# features pull the WebAssembly plugin host and AOT compiler into our binary,
-# and cargo unifies features across the graph, so defaults are off *here*
-# rather than on the member: a member inheriting a workspace dependency cannot
-# turn its defaults off.
+# The engine is linked in-process, so its crates are absorbed as members of
+# *this* workspace and their `xxx = { workspace = true }` resolves against the
+# table below — which therefore mirrors AttaCore's own. AttaCore adding a
+# dependency means adding it here too.
+#
+# `daemon` keeps its default features: the default is the QuickJS script
+# carrier (~1 MB), and the plugin carrier (wasmtime, ~20 MB) is deliberately
+# not built. The two are mutually exclusive upstream — `daemon/src/lib.rs`
+# refuses a build carrying both — so this is a choice, not an omission.
+# Extension execution is AttaCore's; Nest links no interpreter of its own.
 # ──────────────────────────────────────────────
-daemon      = { path = "core/daemon", default-features = false }
+daemon      = { path = "core/daemon" }
 base        = { path = "core/crates/core" }
 model       = { path = "core/crates/model" }
 auth        = { path = "core/crates/auth" }
@@ -35,6 +64,7 @@ hooks       = { path = "core/crates/hooks" }
 plugin      = { path = "core/crates/plugin" }
 plugin-host = { path = "core/crates/plugin-host", default-features = false }
 wasm-host   = { path = "core/crates/wasm-host", default-features = false }
+script-host = { path = "core/crates/script-host" }
 telemetry   = { path = "core/crates/telemetry" }
 history     = { path = "core/crates/history" }
 permissions = { path = "core/crates/permissions" }
@@ -49,9 +79,7 @@ team        = { path = "core/crates/team" }
 task        = { path = "core/crates/task" }
 
 # ──────────────────────────────────────────────
-# Third-party — the absorbed AttaCore crates resolve their
-# `xxx = { workspace = true }` against *this* table, so it mirrors AttaCore's
-# own. AttaCore adding a dependency means adding it here too.
+# Third-party — mirrors AttaCore's table (see above).
 # ──────────────────────────────────────────────
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -66,6 +94,13 @@ eventsource-stream = "0.2"
 bytes = "1"
 url = "2"
 axum = { version = "0.8", features = ["ws"] }
+# TLS for the listener. rustls is already in the graph via reqwest, so the
+# marginal cost against the binary-size budget is small.
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+# Signature verification for device challenge-response. Already in the graph
+# under rustls, so this declares what is linked rather than adding to it.
+ring = "0.17"
 include_dir = "0.7"
 
 # WebSocket
@@ -87,6 +122,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 semver = "1"
 jsonschema = { version = "0.49", default-features = false }
+rquickjs = { version = "0.12", default-features = false, features = ["std"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
 sha2 = "0.10"
 hex = "0.4"
@@ -115,3 +151,11 @@ clap = { version = "4", features = ["derive"] }
 # Dev
 tempfile = "3"
 notify = "6"
+
+# Mirrors AttaCore's release profile — see its Cargo.toml for why `panic`
+# stays `unwind` and `lto` stays `thin`. The binary-size budget in
+# docs/concept_and_architecture.md §7.2 is measured against this profile.
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1

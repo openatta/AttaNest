@@ -1,0 +1,29 @@
+[package]
+name = "nest-builtin"
+version      = { workspace = true }
+edition      = { workspace = true }
+rust-version = { workspace = true }
+license      = { workspace = true }
+publish      = false
+description  = "Nest's own contributions, through the same points a plugin uses"
+
+[dependencies]
+nest-contract = { workspace = true }
+nest-contrib  = { workspace = true }
+nest-hub      = { workspace = true }
+nest-transport = { workspace = true }
+base        = { workspace = true }
+history     = { workspace = true }
+telemetry   = { workspace = true }
+tokio       = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+toml        = { workspace = true }
+anyhow      = { workspace = true }
+tracing     = { workspace = true }
+async-trait = { workspace = true }
+uuid        = { workspace = true }
+ignore      = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
