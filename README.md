@@ -221,9 +221,9 @@ node tests/i18n-smoke.mjs                        # language-pack health
 node tests/readme-pairing.mjs                    # the two READMEs moved together
 node tests/ui-smoke.mjs   <port> <token>         # real engine + real model
 node tests/tool-smoke.mjs <port> <token>         # real tool calls
-# The two above want a backend started with `--scenes chat`, and the parity
-# test wants one serving both topologies:
-#   nest --scenes chat --profile <a profile listing both topologies>
+# The two above want a backend started with `--scenes chat`; the two below want
+# a profile listing both topologies, and `remote-smoke` a non-loopback bind
+# with TLS. Each says so when it is not — see tests/api/README.md.
 
 node tests/api/run.mjs                            # the backend, through its own API
 node tests/api/run.mjs --live                     # …against a real model instead

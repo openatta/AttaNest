@@ -40,8 +40,26 @@ replaying session does not do.
 | `tests/browser/interface.spec.mjs` | layout and themes, in a real browser | chromium |
 | `tests/browser/interaction.spec.mjs` | typing, tool rows, permission cards — real UI on a real backend | chromium |
 | `tests/package-e2e.mjs` | a package from zip to a row on screen | chromium; the release binary |
-| `tests/topology-parity.mjs` | both topologies give the same answers | a running backend |
-| `tests/remote-smoke.mjs` | pairing, TLS, revocation | a reachable backend |
+| `tests/topology-parity.mjs` | both topologies give the same answers | a backend serving **both** |
+| `tests/remote-smoke.mjs` | pairing, TLS, revocation | a **reachable** backend, TLS, both topologies |
+
+The last four want a backend started a particular way, and each one now says
+so when it is not: `ui-smoke` and `tool-smoke` need `--scenes chat`, the two
+below it need a profile listing both topologies, and `remote-smoke` needs a
+non-loopback bind — on loopback the per-process token is the whole story by
+design, so its rules have nothing to gate.
+
+```toml
+# profile.toml — what the last three want
+[transport]
+topologies = ["single_duplex", "split_streams"]
+host = "0.0.0.0"          # loopback only for the first two
+port = 4310
+```
+
+```
+nest --profile profile.toml --scenes chat --tls-cert cert.pem --tls-key key.pem
+```
 
 The reducer tests are the server, so every event kind can be produced on
 demand — which covers the front end and, deliberately, none of the back end.

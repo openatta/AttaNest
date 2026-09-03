@@ -198,8 +198,8 @@ node tests/i18n-smoke.mjs                        # 语言包体检
 node tests/readme-pairing.mjs                    # 两份 README 是一起改的
 node tests/ui-smoke.mjs   <port> <token>         # 真引擎 + 真模型
 node tests/tool-smoke.mjs <port> <token>         # 真工具调用
-# 上面两个要后端带 `--scenes chat` 起；拓扑对比那个要后端同时服务两种拓扑：
-#   nest --scenes chat --profile <一份两种拓扑都列上的 profile>
+# 上面两个要后端带 `--scenes chat` 起；下面两个要 profile 里两种拓扑都列上，
+# remote-smoke 还要非回环监听 + TLS。前提不对时它们各自会说一句 —— 见 tests/api/README.md。
 
 node tests/api/run.mjs                            # 后端，走它自己的 API
 node tests/api/run.mjs --live                     # …改成对着真模型跑

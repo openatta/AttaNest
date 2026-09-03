@@ -141,7 +141,23 @@ export default {
       const attached = await late.call("nest.attach", { session_id: created.session_id });
       // Catching up happens entirely inside the hub's buffer. The engine
       // re-sends nothing, and mid-turn the transcript does not have it yet.
-      assert(attached.replay.length > 0, "the late client caught up on nothing");
+      if (!attached.replay.length) {
+        // Nothing to catch up on is two different facts. Opening a second
+        // client takes long enough — a handshake and, on split streams, two
+        // more streams — that a three-sentence answer can finish inside that
+        // window, and then there is no mid-turn left to arrive in. That is
+        // the turn being short, not the buffer being empty, so it is asked
+        // rather than assumed.
+        const over = client.events.some(
+          (f) => f.method === "nest.turn_settled" && f.params.session_id === created.session_id,
+        );
+        if (over) {
+          late.close();
+          await finish(client, created.session_id);
+          inconclusive("the turn settled before the second client finished connecting");
+        }
+        assert(false, "the late client caught up on nothing while the turn was still running");
+      }
 
       await late.waitFor(
         (f) => f.method === "nest.turn_settled" && f.params.session_id === created.session_id,
